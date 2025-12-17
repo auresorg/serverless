@@ -17,8 +17,8 @@ const getDaySuffix = (day) => {
 };
 
 const formatDate = (dateStr, includeDay = false) => {
-    if (!dateStr) return 'Present';
-    if (dateStr === 'null' || dateStr === null) return 'Present';
+    if (!dateStr) return ''; 
+    if (dateStr === 'null' || dateStr === null) return '';
 
     const date = new Date(dateStr);
     if (isNaN(date.getTime())) return dateStr;
@@ -55,6 +55,56 @@ const renderResume = (data) => {
         \usepackage[english]{babel}
         \usepackage{tabularx}
         \input{glyphtounicode}
+
+        \DeclareUnicodeCharacter{2070}{\ensuremath{^0}}
+        \DeclareUnicodeCharacter{00B9}{\ensuremath{^1}}
+        \DeclareUnicodeCharacter{00B2}{\ensuremath{^2}}
+        \DeclareUnicodeCharacter{00B3}{\ensuremath{^3}}
+        \DeclareUnicodeCharacter{2074}{\ensuremath{^4}}
+        \DeclareUnicodeCharacter{2075}{\ensuremath{^5}}
+        \DeclareUnicodeCharacter{2076}{\ensuremath{^6}}
+        \DeclareUnicodeCharacter{2077}{\ensuremath{^7}}
+        \DeclareUnicodeCharacter{2078}{\ensuremath{^8}}
+        \DeclareUnicodeCharacter{2079}{\ensuremath{^9}}
+
+        \DeclareUnicodeCharacter{2080}{\ensuremath{_0}}
+        \DeclareUnicodeCharacter{2081}{\ensuremath{_1}}
+        \DeclareUnicodeCharacter{2082}{\ensuremath{_2}}
+        \DeclareUnicodeCharacter{2083}{\ensuremath{_3}}
+        \DeclareUnicodeCharacter{2084}{\ensuremath{_4}}
+        \DeclareUnicodeCharacter{2085}{\ensuremath{_5}}
+        \DeclareUnicodeCharacter{2086}{\ensuremath{_6}}
+        \DeclareUnicodeCharacter{2087}{\ensuremath{_7}}
+        \DeclareUnicodeCharacter{2088}{\ensuremath{_8}}
+        \DeclareUnicodeCharacter{2089}{\ensuremath{_9}}
+
+        \DeclareUnicodeCharacter{2090}{\ensuremath{_a}}
+        \DeclareUnicodeCharacter{2091}{\ensuremath{_e}}
+        \DeclareUnicodeCharacter{2095}{\ensuremath{_h}}
+        \DeclareUnicodeCharacter{1D62}{\ensuremath{_i}}
+        \DeclareUnicodeCharacter{2C7C}{\ensuremath{_j}}
+        \DeclareUnicodeCharacter{2096}{\ensuremath{_k}}
+        \DeclareUnicodeCharacter{2097}{\ensuremath{_l}}
+        \DeclareUnicodeCharacter{2098}{\ensuremath{_m}}
+        \DeclareUnicodeCharacter{2099}{\ensuremath{_n}}
+        \DeclareUnicodeCharacter{2092}{\ensuremath{_o}}
+        \DeclareUnicodeCharacter{209A}{\ensuremath{_p}}
+        \DeclareUnicodeCharacter{209B}{\ensuremath{_r}}
+        \DeclareUnicodeCharacter{209C}{\ensuremath{_s}}
+        \DeclareUnicodeCharacter{209D}{\ensuremath{_t}}
+        \DeclareUnicodeCharacter{2093}{\ensuremath{_x}}
+
+        \DeclareUnicodeCharacter{207A}{\ensuremath{^+}}
+        \DeclareUnicodeCharacter{207B}{\ensuremath{^-}}
+        \DeclareUnicodeCharacter{208A}{\ensuremath{_+}}
+        \DeclareUnicodeCharacter{208B}{\ensuremath{_-}}
+
+        \DeclareUnicodeCharacter{00A9}{\textcopyright}
+        \DeclareUnicodeCharacter{00AE}{\textregistered}
+        \DeclareUnicodeCharacter{2122}{\texttrademark}
+        \DeclareUnicodeCharacter{2022}{\textbullet}
+        \DeclareUnicodeCharacter{2013}{--}
+        \DeclareUnicodeCharacter{2014}{---}
 
         \pagestyle{fancy}
         \fancyhf{} 
@@ -155,13 +205,14 @@ const renderResume = (data) => {
         \end{center}
     `;
 
-    if (safeGet(data, 'education')) {
+    if (safeGet(data, 'education') && safeGet(data, 'education.name')) {
         TEMPLATE += String.raw`
         \section{Education}
         \resumeSubHeadingListStart
             \resumeSubheading
             {${safeGet(data, 'education.name')}}{${safeGet(data, 'education.location')}}
-            {${safeGet(data, 'education.degree')} ${safeGet(data, 'education.course')}}{${formatDate(safeGet(data, 'education.from'))} -- ${formatDate(safeGet(data, 'education.to'))}}
+            {${safeGet(data, 'education.degree')} ${safeGet(data, 'education.course')}}
+            {${formatDate(safeGet(data, 'education.from'))} -- ${safeGet(data, 'education.to') ? formatDate(safeGet(data, 'education.to')) : 'Present'}} 
         `;
 
         if (safeGet(data, 'education.score') && safeGet(data, 'education.maxscore')) {
@@ -186,7 +237,7 @@ const renderResume = (data) => {
         for (const course of data.courses) {
             TEMPLATE += String.raw`
                 \resumeSubheading
-                    {${course.title}}{${formatDate(course.started_at)} -- ${formatDate(course.completed_at)}}
+                    {${course.title}}{${formatDate(course.started_at)} -- ${course.completed_at ? formatDate(course.completed_at) : 'Present'}}
                     {${course.provider}}{}
                 `;
 
@@ -236,6 +287,37 @@ const renderResume = (data) => {
         `;
     }
 
+    if (safeGet(data, 'awards') && data.awards.length > 0) {
+        TEMPLATE += String.raw`
+        \section{Awards}
+        \resumeSubHeadingListStart
+        `;
+
+        for (const award of data.awards) {
+            if (!award.title) continue;
+
+            TEMPLATE += String.raw`
+            \resumeSubheading
+                {${award.title}}{${formatDate(award.date)}}
+                {${award.issuer} \textnormal{\textit{-- ${award.type}}}}{}
+            `;
+
+            if (award.highlights && award.highlights.length > 0) {
+                TEMPLATE += String.raw`
+                \resumeItemListStart
+                    ${award.highlights
+                        .map((highlight) => String.raw`\resumeItem{${highlight}}`)
+                        .join("")}
+                \resumeItemListEnd
+                `;
+            }
+        }
+
+        TEMPLATE += String.raw`
+        \resumeSubHeadingListEnd
+        `;
+    }
+
     if (safeGet(data, 'experiences') && data.experiences.length > 0) {
         TEMPLATE += String.raw`
         \section{Experience}
@@ -245,7 +327,7 @@ const renderResume = (data) => {
         for (const exp of data.experiences) {
             TEMPLATE += String.raw`
             \resumeSubheading
-                {${exp.title}}{${formatDate(exp.from_date)} -- ${formatDate(exp.to_date)}}
+                {${exp.title}}{${formatDate(exp.from_date)} -- ${exp.to_date ? formatDate(exp.to_date) : 'Present'}}
                 {${exp.company}}{${exp.location}}
             `;
 

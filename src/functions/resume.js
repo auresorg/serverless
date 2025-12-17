@@ -325,10 +325,11 @@ app.http('resume', {
                 return new Response("Failed to upload PDF", { status: uploadResponse.status });
             }
 
-            return new Response(JSON.stringify({ url: `https://vjuvnrvitnsvfopqukho.supabase.co/storage/v1/object/public/aurespdf/${filePath}` }, null, 2), {
+            return new Response(pdfBuffer, {
                 status: 200,
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/pdf',
+                    'X-File-Name': filePath 
                 }
             });
 

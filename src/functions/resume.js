@@ -420,3 +420,28 @@ app.http('resume', {
         }
     }
 });
+
+app.http('tex', {
+    methods: ['POST'],
+    authLevel: 'anonymous',
+    handler: async (req) => {
+        try {
+            const reqBody = await req.json();
+            if (!reqBody) {
+                return new Response("No resume data provided", { status: 400 });
+            }
+            const resumeData = reqBody;
+
+            const texString = renderResume(resumeData);
+            return new Response(texString, {
+                status: 200,
+                headers: {
+                    'Content-Type': 'application/x-tex',
+                    'X-File-Name': `${resumeData.github}-${resumeData.role}.tex`
+                }
+            });
+        } catch (error) {
+            return new Response(`Error generating LaTeX: ${error.message}`, { status: 500 });
+        }
+    }
+});

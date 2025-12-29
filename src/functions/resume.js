@@ -4,15 +4,17 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const util = require('util');
-const stream = require('stream'); 
+const stream = require('stream');
 const axios = require('axios');
 
 const execFilePromise = util.promisify(execFile);
 const pipeline = util.promisify(stream.pipeline);
 
+// --- CONFIGURATION ---
 const SUPABASE_URL = "https://vjuvnrvitnsvfopqukho.supabase.co/storage/v1/object";
 const BUCKET = "aurespdf";
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const TECTONIC_URL = "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic@0.15.0/tectonic-0.15.0-x86_64-unknown-linux-musl.tar.gz";
 
 const getDaySuffix = (day) => {
     if (day >= 11 && day <= 13) return 'th';
@@ -310,148 +312,130 @@ const renderResume = (data) => {
     return TEMPLATE;
 };
 
+/**
+ * LOGIC: Ensures Tectonic binary is ready to run.
+ * Windows: Uses local .exe
+ * Linux: Downloads fresh binary to /tmp if missing or corrupt.
+ */
+async function setupTectonic() {
+    if (process.platform === 'win32') {
+        return path.join(__dirname, 'tectonic-windows.exe');
+    }
+
+    const binaryPath = path.join(os.tmpdir(), 'tectonic-v4-fresh');
+
+    // 1. Check if binary exists and is valid (>10MB)
+    if (fs.existsSync(binaryPath)) {
+        if (fs.statSync(binaryPath).size > 10000000) {
+            return binaryPath; // It's good, use it.
+        }
+        try { fs.unlinkSync(binaryPath); } catch (e) {} // Corrupt, delete it.
+    }
+
+    // 2. Download and Setup (Cold Start Only)
+    console.log("[INIT] Downloading fresh Tectonic binary...");
+    const tarPath = path.join(os.tmpdir(), `tectonic-${Math.random().toString(36).slice(2)}.tar.gz`);
+
+    try {
+        const response = await axios.get(TECTONIC_URL, { responseType: 'stream' });
+        await pipeline(response.data, fs.createWriteStream(tarPath));
+
+        await execFilePromise('tar', ['-xzf', tarPath, '-C', os.tmpdir()]);
+        
+        // Tar extracts to 'tectonic', rename it to our versioned name
+        fs.renameSync(path.join(os.tmpdir(), 'tectonic'), binaryPath);
+        fs.chmodSync(binaryPath, '755');
+        
+        console.log("[INIT] Tectonic installed successfully.");
+    } finally {
+        try { fs.unlinkSync(tarPath); } catch (e) {}
+    }
+
+    return binaryPath;
+}
+
+// --- HANDLERS ---
+
+// 1. RESUME GENERATOR (Optimized)
 app.http('resume', {
     methods: ['POST'],
     authLevel: 'anonymous',
     handler: async (req) => {
-        const totalStart = Date.now();
+        const start = Date.now();
+        const runId = Math.random().toString(36).substring(7);
+        const inputPath = path.join(os.tmpdir(), `${runId}.tex`);
+        const outputPath = path.join(os.tmpdir(), `${runId}.pdf`);
+
         try {
             const reqBody = await req.json();
             if (!reqBody) return new Response("No data", { status: 400 });
 
-            // 1. Generate Latex
-            // Ensure renderResume is defined above!
-            // If you copy-pasted this, make sure you didn't delete the renderResume function block.
-            // For this fix, I assume renderResume is still in your file.
-            // If you get "renderResume is not defined", paste your renderResume function back in.
+            // A. Prepare Latex & Binary
+            const texString = renderResume(reqBody);
+            const executable = await setupTectonic();
 
-            // To be safe, I will re-inject a minimal renderResume call assuming you kept the function:
-            let texString = "";
-            try {
-                texString = renderResume(reqBody);
-            } catch (e) {
-                // Fallback if function missing during copy-paste
-                return new Response("renderResume function missing in code", { status: 500 });
-            }
-
-            // 2. Setup Paths
-            const isWindows = process.platform === 'win32';
-            const runId = Math.random().toString(36).substring(7);
-            const inputPath = path.join(os.tmpdir(), `${runId}.tex`);
-            const outputDir = os.tmpdir();
-            const outputPath = path.join(outputDir, `${runId}.pdf`);
-
-            // 3. EXECUTION LOGIC (The Fix)
-            let executablePath;
-
-            if (isWindows) {
-                // LOCAL WINDOWS: Use the local file you have
-                executablePath = path.join(__dirname, 'tectonic-windows.exe');
-            } else {
-                // AZURE LINUX: Download fresh to avoid upload corruption
-                const cachedBinary = path.join(os.tmpdir(), 'tectonic-linux-downloaded');
-
-                if (!fs.existsSync(cachedBinary)) {
-                    console.log("[INIT] Downloading Tectonic binary (First Run Only)...");
-
-                    // URL for the official Linux Musl binary
-                    const url = "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic@0.15.0/tectonic-0.15.0-x86_64-unknown-linux-musl.tar.gz";
-                    const tarPath = path.join(os.tmpdir(), 'tectonic.tar.gz');
-
-                    // A. Download
-                    const response = await axios.get(url, { responseType: 'stream' });
-                    await pipeline(response.data, fs.createWriteStream(tarPath));
-
-                    // B. Extract (Azure Linux has 'tar' installed)
-                    console.log("[INIT] Extracting binary...");
-                    await execFilePromise('tar', ['-xzf', tarPath, '-C', os.tmpdir()]);
-
-                    // The tar contains a file named 'tectonic'. We rename it to avoid conflicts.
-                    const extractedFile = path.join(os.tmpdir(), 'tectonic');
-                    fs.renameSync(extractedFile, cachedBinary);
-
-                    // C. Cleanup Tar
-                    fs.unlinkSync(tarPath);
-
-                    // D. Permission
-                    fs.chmodSync(cachedBinary, '755');
-                    console.log("[INIT] Setup Complete.");
-                }
-                executablePath = cachedBinary;
-            }
-
-            // 4. Write Tex to Temp File
+            // B. Write & Compile
             fs.writeFileSync(inputPath, texString);
+            await execFilePromise(executable, [inputPath, '--outdir', os.tmpdir()]);
 
-            console.log(`[TIMER] Starting Compilation...`);
-            const compileStart = Date.now();
-
-            // 5. Run Tectonic
-            // We pass the executable path we prepared above
-            await execFilePromise(executablePath, [inputPath, '--outdir', outputDir]);
-
-            console.log(`[TIMER] Compilation took: ${Date.now() - compileStart}ms`);
-
-            // 6. Read Result
-            if (!fs.existsSync(outputPath)) {
-                throw new Error("PDF generation failed: Output file not found");
-            }
+            if (!fs.existsSync(outputPath)) throw new Error("PDF Output missing");
+            
             const pdfBuffer = fs.readFileSync(outputPath);
 
-            // 7. Upload to Supabase (FIRE AND FORGET - No Await for speed, Await for safety)
-            // We await it here to be safe on Azure Consumption
+            // C. Upload (Await ensures success on Consumption plan)
             const filePath = `${reqBody.github}-${reqBody.role}.pdf`;
-            const uploadUrl = `${SUPABASE_URL}/${BUCKET}/${encodeURIComponent(filePath)}`;
-
-            await axios.put(uploadUrl, pdfBuffer, {
-                headers: {
-                    'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
-                    'Content-Type': 'application/pdf'
+            await axios.put(`${SUPABASE_URL}/${BUCKET}/${encodeURIComponent(filePath)}`, pdfBuffer, {
+                headers: { 
+                    'Authorization': `Bearer ${SERVICE_ROLE_KEY}`, 
+                    'Content-Type': 'application/pdf' 
                 }
             });
 
-            // 8. Cleanup
-            try {
-                fs.unlinkSync(inputPath);
-                fs.unlinkSync(outputPath);
-            } catch (e) { }
+            console.log(`[PERF] Resume generated in ${Date.now() - start}ms`);
 
             return new Response(pdfBuffer, {
                 status: 200,
-                headers: {
-                    'Content-Type': 'application/pdf',
-                    'X-File-Name': filePath
-                }
+                headers: { 'Content-Type': 'application/pdf', 'X-File-Name': filePath }
             });
 
         } catch (error) {
-            console.error(error);
+            console.error(`[ERROR] ${error.message}`);
             return new Response(`Error: ${error.message}`, { status: 500 });
+        } finally {
+            // Cleanup temp files
+            try { fs.unlinkSync(inputPath); fs.unlinkSync(outputPath); } catch (e) {}
         }
     }
 });
 
+// 2. TEX DEBUGGER (Cleaned)
 app.http('tex', {
     methods: ['POST'],
     authLevel: 'anonymous',
     handler: async (req) => {
         try {
             const reqBody = await req.json();
-            if (!reqBody) {
-                return new Response("No resume data provided", { status: 400 });
-            }
-            const resumeData = reqBody;
+            if (!reqBody) return new Response("No data", { status: 400 });
 
-            const texString = renderResume(resumeData);
-            return new Response(texString, {
+            return new Response(renderResume(reqBody), {
                 status: 200,
-                headers: {
-                    'Content-Type': 'application/x-tex',
-                    'X-File-Name': `${resumeData.github}-${resumeData.role}.tex`
+                headers: { 
+                    'Content-Type': 'text/plain', 
+                    'X-File-Name': `${reqBody.github || 'resume'}.tex` 
                 }
             });
         } catch (error) {
-            return new Response(`Error generating LaTeX: ${error.message}`, { status: 500 });
+            return new Response(`Error: ${error.message}`, { status: 500 });
         }
+    }
+});
+
+// 3. KEEP WARM TRIGGER (Prevents Cold Starts)
+// Runs every 5 minutes to keep the instance alive.
+app.timer('keepWarm', {
+    schedule: '0 */5 * * * *',
+    handler: (myTimer, context) => {
+        // No logic needed. The execution itself wakes the server.
+        context.log('Keep-warm pulse executed.');
     }
 });

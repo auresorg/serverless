@@ -4,17 +4,14 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const util = require('util');
-const stream = require('stream');
 const axios = require('axios');
 
 const execFilePromise = util.promisify(execFile);
-const pipeline = util.promisify(stream.pipeline);
 
 // --- CONFIGURATION ---
 const SUPABASE_URL = "https://vjuvnrvitnsvfopqukho.supabase.co/storage/v1/object";
 const BUCKET = "aurespdf";
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const TECTONIC_URL = "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic@0.15.0/tectonic-0.15.0-x86_64-unknown-linux-musl.tar.gz";
 const TG_TOKEN = process.env.TG_TOKEN;
 const TG_CHAT_ID = process.env.TG_CHAT_ID;
 
@@ -325,62 +322,37 @@ async function sendTelegram(msg) {
     }
 }
 
-/**
- * LOGIC: Ensures Tectonic binary is ready to run.
- * Windows: Uses local .exe
- * Linux: Downloads fresh binary to /tmp if missing or corrupt.
- */
 async function setupTectonic() {
     if (process.platform === 'win32') {
         return path.join(__dirname, 'tectonic-windows.exe');
     }
 
-    const binaryPath = path.join(os.tmpdir(), 'tectonic-v4-fresh');
+    const bundledBinary = path.join(__dirname, 'tectonic'); 
+    const tempBinary = path.join(os.tmpdir(), 'tectonic-ready');
 
-    // 1. Check if binary exists and is valid (>10MB)
-    if (fs.existsSync(binaryPath)) {
-        if (fs.statSync(binaryPath).size > 10000000) {
-            return binaryPath; // It's good, use it.
+    if (fs.existsSync(tempBinary)) {
+        return tempBinary;
+    }
+
+    try {
+        if (!fs.existsSync(bundledBinary)) {
+            await sendTelegram("❌ [CRITICAL] 'tectonic' binary not found in deployment folder!");
+            throw new Error("Tectonic binary missing from bundle");
         }
 
-        try {
-            await sendTelegram("Tectonic binary corrupt, deleting at " + new Date().toString());
-        } finally {}
-
-        try { fs.unlinkSync(binaryPath); } catch (e) {} // Corrupt, delete it.
+        fs.copyFileSync(bundledBinary, tempBinary);
+        fs.chmodSync(tempBinary, '755');
+    } catch (error) {
+        await sendTelegram("❌ [SETUP ERROR] " + error.message);
+        throw error;
     }
 
-    try {
-        await sendTelegram("Tectonic binary missing, downloading at " + new Date().toString());
-    } finally {}
-
-    // 2. Download and Setup (Cold Start Only)
-    const tarPath = path.join(os.tmpdir(), `tectonic-${Math.random().toString(36).slice(2)}.tar.gz`);
-
-    try {
-        const response = await axios.get(TECTONIC_URL, { responseType: 'stream' });
-        await pipeline(response.data, fs.createWriteStream(tarPath));
-
-        await execFilePromise('tar', ['-xzf', tarPath, '-C', os.tmpdir()]);
-        
-        // Tar extracts to 'tectonic', rename it to our versioned name
-        fs.renameSync(path.join(os.tmpdir(), 'tectonic'), binaryPath);
-        fs.chmodSync(binaryPath, '755');
-        
-    } finally {
-        try { fs.unlinkSync(tarPath); } catch (e) {}
-    }
-
-    try {
-        await sendTelegram("Tectonic binary setup executed at " + new Date().toString());
-    } finally {}
-
-    return binaryPath;
+    return tempBinary;
 }
 
 // --- HANDLERS ---
 
-// 1. RESUME GENERATOR (Optimized)
+// 1. RESUME GENERATOR
 app.http('resume', {
     methods: ['POST'],
     authLevel: 'anonymous',
@@ -393,20 +365,18 @@ app.http('resume', {
             const reqBody = await req.json();
             if (!reqBody) return new Response("No data", { status: 400 });
 
-            // A. Prepare Latex & Binary
             const texString = renderResume(reqBody);
+            
             const executable = await setupTectonic();
 
-            // B. Write & Compile
             fs.writeFileSync(inputPath, texString);
             await execFilePromise(executable, [inputPath, '--outdir', os.tmpdir()]);
 
             if (!fs.existsSync(outputPath)) throw new Error("PDF Output missing");
             
             const pdfBuffer = fs.readFileSync(outputPath);
-
-            // C. Upload (Await ensures success on Consumption plan)
             const filePath = `${reqBody.github}-${reqBody.role}.pdf`;
+            
             await axios.put(`${SUPABASE_URL}/${BUCKET}/${encodeURIComponent(filePath)}`, pdfBuffer, {
                 headers: { 
                     'Authorization': `Bearer ${SERVICE_ROLE_KEY}`, 
@@ -422,13 +392,12 @@ app.http('resume', {
         } catch (error) {
             return new Response(`Error: ${error.message}`, { status: 500 });
         } finally {
-            // Cleanup temp files
             try { fs.unlinkSync(inputPath); fs.unlinkSync(outputPath); } catch (e) {}
         }
     }
 });
 
-// 2. TEX DEBUGGER (Cleaned)
+// 2. TEX DEBUGGER
 app.http('tex', {
     methods: ['POST'],
     authLevel: 'anonymous',
@@ -439,10 +408,7 @@ app.http('tex', {
 
             return new Response(renderResume(reqBody), {
                 status: 200,
-                headers: { 
-                    'Content-Type': 'text/plain', 
-                    'X-File-Name': `${reqBody.github || 'resume'}.tex` 
-                }
+                headers: { 'Content-Type': 'text/plain', 'X-File-Name': `${reqBody.github || 'resume'}.tex` }
             });
         } catch (error) {
             return new Response(`Error: ${error.message}`, { status: 500 });
@@ -450,15 +416,12 @@ app.http('tex', {
     }
 });
 
-// 3. KEEP WARM TRIGGER (Prevents Cold Starts)
-// Runs every 5 minutes to keep the instance alive.
+
 app.timer('keepWarm', {
     schedule: '0 */5 8-22 * * *',
-    runOnStartup: true,
     handler: async () => {
         try {
             await setupTectonic();
-            await sendTelegram("Keep-warm pulse executed at " + new Date().toString());
         } catch (e) {
             await sendTelegram("Keep-warm pulse failed at " + new Date().toString() + " with Error: " + e.message);
         }

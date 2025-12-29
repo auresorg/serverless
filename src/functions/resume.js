@@ -1,6 +1,12 @@
 const { app } = require("@azure/functions");
+const { execFile } = require('child_process');
+
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const util = require('util');
+const execFilePromise = util.promisify(execFile);
 const axios = require('axios');
-const FormData = require("form-data");
 
 const SUPABASE_URL = "https://vjuvnrvitnsvfopqukho.supabase.co/storage/v1/object";
 const BUCKET = "aurespdf";
@@ -54,57 +60,6 @@ const renderResume = (data) => {
         \usepackage{fancyhdr}
         \usepackage[english]{babel}
         \usepackage{tabularx}
-        \input{glyphtounicode}
-
-        \DeclareUnicodeCharacter{2070}{\ensuremath{^0}}
-        \DeclareUnicodeCharacter{00B9}{\ensuremath{^1}}
-        \DeclareUnicodeCharacter{00B2}{\ensuremath{^2}}
-        \DeclareUnicodeCharacter{00B3}{\ensuremath{^3}}
-        \DeclareUnicodeCharacter{2074}{\ensuremath{^4}}
-        \DeclareUnicodeCharacter{2075}{\ensuremath{^5}}
-        \DeclareUnicodeCharacter{2076}{\ensuremath{^6}}
-        \DeclareUnicodeCharacter{2077}{\ensuremath{^7}}
-        \DeclareUnicodeCharacter{2078}{\ensuremath{^8}}
-        \DeclareUnicodeCharacter{2079}{\ensuremath{^9}}
-
-        \DeclareUnicodeCharacter{2080}{\ensuremath{_0}}
-        \DeclareUnicodeCharacter{2081}{\ensuremath{_1}}
-        \DeclareUnicodeCharacter{2082}{\ensuremath{_2}}
-        \DeclareUnicodeCharacter{2083}{\ensuremath{_3}}
-        \DeclareUnicodeCharacter{2084}{\ensuremath{_4}}
-        \DeclareUnicodeCharacter{2085}{\ensuremath{_5}}
-        \DeclareUnicodeCharacter{2086}{\ensuremath{_6}}
-        \DeclareUnicodeCharacter{2087}{\ensuremath{_7}}
-        \DeclareUnicodeCharacter{2088}{\ensuremath{_8}}
-        \DeclareUnicodeCharacter{2089}{\ensuremath{_9}}
-
-        \DeclareUnicodeCharacter{2090}{\ensuremath{_a}}
-        \DeclareUnicodeCharacter{2091}{\ensuremath{_e}}
-        \DeclareUnicodeCharacter{2095}{\ensuremath{_h}}
-        \DeclareUnicodeCharacter{1D62}{\ensuremath{_i}}
-        \DeclareUnicodeCharacter{2C7C}{\ensuremath{_j}}
-        \DeclareUnicodeCharacter{2096}{\ensuremath{_k}}
-        \DeclareUnicodeCharacter{2097}{\ensuremath{_l}}
-        \DeclareUnicodeCharacter{2098}{\ensuremath{_m}}
-        \DeclareUnicodeCharacter{2099}{\ensuremath{_n}}
-        \DeclareUnicodeCharacter{2092}{\ensuremath{_o}}
-        \DeclareUnicodeCharacter{209A}{\ensuremath{_p}}
-        \DeclareUnicodeCharacter{209B}{\ensuremath{_r}}
-        \DeclareUnicodeCharacter{209C}{\ensuremath{_s}}
-        \DeclareUnicodeCharacter{209D}{\ensuremath{_t}}
-        \DeclareUnicodeCharacter{2093}{\ensuremath{_x}}
-
-        \DeclareUnicodeCharacter{207A}{\ensuremath{^+}}
-        \DeclareUnicodeCharacter{207B}{\ensuremath{^-}}
-        \DeclareUnicodeCharacter{208A}{\ensuremath{_+}}
-        \DeclareUnicodeCharacter{208B}{\ensuremath{_-}}
-
-        \DeclareUnicodeCharacter{00A9}{\textcopyright}
-        \DeclareUnicodeCharacter{00AE}{\textregistered}
-        \DeclareUnicodeCharacter{2122}{\texttrademark}
-        \DeclareUnicodeCharacter{2022}{\textbullet}
-        \DeclareUnicodeCharacter{2013}{--}
-        \DeclareUnicodeCharacter{2014}{---}
 
         \pagestyle{fancy}
         \fancyhf{} 
@@ -128,7 +83,6 @@ const renderResume = (data) => {
         \vspace{-4pt}\scshape\raggedright\large
         }{}{0em}{}[\color{black}\titlerule \vspace{-5pt}]
 
-        \pdfgentounicode=1
 
         \newcommand{\resumeItem}[1]{
         \item\small{
@@ -358,86 +312,77 @@ app.http('resume', {
     methods: ['POST'],
     authLevel: 'anonymous',
     handler: async (req) => {
-        const totalStart = Date.now(); // TIMER: Start Tracking
+        const totalStart = Date.now();
         try {
-            console.log("[TIMER] Started Request Processing");
-
-            const reqBodyStart = Date.now(); // TIMER: JSON Parse Start
             const reqBody = await req.json();
-            console.log(`[TIMER] JSON Parse & Body Read: ${Date.now() - reqBodyStart}ms`);
+            if (!reqBody) return new Response("No data", { status: 400 });
+
+            const texString = renderResume(reqBody);
+
+            // 1. Determine OS and Select Binary
+            const isWindows = process.platform === 'win32';
+            const binaryName = isWindows ? 'tectonic-windows.exe' : 'tectonic-linux';
+            const tectonicPath = path.join(__dirname, binaryName);
+
+            // 2. Setup Cross-Platform Temp Paths
+            // os.tmpdir() gives C:\Users\AppData\Local\Temp on Windows and /tmp on Linux
+            const runId = Math.random().toString(36).substring(7);
+            const inputPath = path.join(os.tmpdir(), `${runId}.tex`);
+            const outputDir = os.tmpdir(); 
+            const outputPath = path.join(outputDir, `${runId}.pdf`);
+
+            // 3. Write Tex to Temp File
+            fs.writeFileSync(inputPath, texString);
+
+            console.log(`[TIMER] Starting Local Compilation on ${process.platform}...`);
+            const compileStart = Date.now();
+
+            // 4. Permissions (Only needed for Linux)
+            if (!isWindows) {
+                try { fs.chmodSync(tectonicPath, '755'); } catch (e) {}
+            }
+
+            // 5. Run Tectonic
+            await execFilePromise(tectonicPath, [inputPath, '--outdir', outputDir]);
             
-            if (!reqBody) {
-                return new Response("No resume data provided", { status: 400 });
+            console.log(`[TIMER] Compilation took: ${Date.now() - compileStart}ms`);
+
+            // 6. Read Result
+            if (!fs.existsSync(outputPath)) {
+                throw new Error("PDF generation failed: Output file not found");
             }
+            const pdfBuffer = fs.readFileSync(outputPath);
 
-            const resumeData = reqBody;
-
-            const renderStart = Date.now(); // TIMER: Latex Render Start
-            const texString = renderResume(resumeData);
-            console.log(`[TIMER] Latex String Generation: ${Date.now() - renderStart}ms`);
-
-            const form = new FormData();
-            form.append("filecontents[]", texString);
-            form.append("filename[]", "document.tex");
-            form.append("engine", "pdflatex");
-            form.append("return", "pdf");
-
-            console.log("[TIMER] Starting texlive.net request...");
-            const texLiveStart = Date.now(); // TIMER: TexLive Request Start
-
-            const response = await axios.post(
-                "https://texlive.net/cgi-bin/latexcgi",
-                form,
-                {
-                    headers: form.getHeaders(),
-                    responseType: "arraybuffer",
-                }
-            );
-
-            console.log(`[TIMER] texlive.net API Response: ${Date.now() - texLiveStart}ms`); // CRITICAL LOG
-
-            if (response.status !== 200) {
-                return new Response("Failed to render resume", { status: response.status });
-            }
-
-            const filePath = `${resumeData.github}-${resumeData.role}.pdf`;
-            const pdfBuffer = Buffer.from(response.data);
+            // 7. Upload (Keep existing logic)
+            const filePath = `${reqBody.github}-${reqBody.role}.pdf`;
             const uploadUrl = `${SUPABASE_URL}/${BUCKET}/${encodeURIComponent(filePath)}`;
 
-            console.log("[TIMER] Starting Supabase Upload...");
-            const uploadStart = Date.now(); // TIMER: Supabase Upload Start
-
-            const uploadResponse = await axios.put(
-                uploadUrl,
-                pdfBuffer,
-                {
-                    headers: {
-                        'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
-                        'Content-Type': 'application/pdf'
-                    },
-                    validateStatus: () => true
+            // IMPORTANT: Await this on Azure Consumption to prevent freezing
+            await axios.put(uploadUrl, pdfBuffer, {
+                headers: {
+                    'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
+                    'Content-Type': 'application/pdf'
                 }
-            );
+            });
 
-            console.log(`[TIMER] Supabase Upload: ${Date.now() - uploadStart}ms`);
+            // 8. Cleanup
+            try { 
+                fs.unlinkSync(inputPath); 
+                fs.unlinkSync(outputPath); 
+            } catch(e) {}
 
-            if (uploadResponse.status !== 200) {
-                return new Response("Failed to upload PDF", { status: uploadResponse.status });
-            }
-
-            console.log(`[TIMER] TOTAL EXECUTION TIME: ${Date.now() - totalStart}ms`);
+            console.log(`[TIMER] Total Time: ${Date.now() - totalStart}ms`);
 
             return new Response(pdfBuffer, {
                 status: 200,
-                headers: {
+                headers: { 
                     'Content-Type': 'application/pdf',
-                    'X-File-Name': filePath 
+                    'X-File-Name': filePath
                 }
             });
 
         } catch (error) {
-            console.error(`[TIMER] Error occurred after: ${Date.now() - totalStart}ms`);
-            return new Response(`Error rendering resume: ${error.message}`, { status: 500 });
+            return new Response(`Error: ${error.message}`, { status: 500 });
         }
     }
 });

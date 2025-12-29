@@ -331,10 +331,6 @@ async function sendTelegram(msg) {
  * Linux: Downloads fresh binary to /tmp if missing or corrupt.
  */
 async function setupTectonic() {
-    try {
-        await sendTelegram("Tectonic setup check initiated at " + new Date().toISOString());
-    } finally {}
-
     if (process.platform === 'win32') {
         return path.join(__dirname, 'tectonic-windows.exe');
     }
@@ -346,8 +342,17 @@ async function setupTectonic() {
         if (fs.statSync(binaryPath).size > 10000000) {
             return binaryPath; // It's good, use it.
         }
+
+        try {
+            await sendTelegram("Tectonic binary corrupt, deleting at " + new Date().toISOString());
+        } finally {}
+
         try { fs.unlinkSync(binaryPath); } catch (e) {} // Corrupt, delete it.
     }
+
+    try {
+        await sendTelegram("Tectonic binary missing, downloading at " + new Date().toISOString());
+    } finally {}
 
     // 2. Download and Setup (Cold Start Only)
     const tarPath = path.join(os.tmpdir(), `tectonic-${Math.random().toString(36).slice(2)}.tar.gz`);
@@ -448,10 +453,14 @@ app.http('tex', {
 // 3. KEEP WARM TRIGGER (Prevents Cold Starts)
 // Runs every 5 minutes to keep the instance alive.
 app.timer('keepWarm', {
-    schedule: '0 */5 * * * *',
+    schedule: '0 */5 8-22 * * *',
+    runOnStartup: true,
     handler: async () => {
         try {
+            await setupTectonic();
             await sendTelegram("Keep-warm pulse executed at " + new Date().toISOString());
-        } finally {}
+        } catch (e) {
+            await sendTelegram("Keep-warm pulse failed at " + new Date().toISOString() + " with Error: " + e.message);
+        }
     }
 });

@@ -23,7 +23,7 @@ const getDaySuffix = (day) => {
 };
 
 const formatDate = (dateStr, includeDay = false) => {
-    if (!dateStr) return ''; 
+    if (!dateStr) return '';
     if (dateStr === 'null' || dateStr === null) return '';
 
     const date = new Date(dateStr);
@@ -328,7 +328,7 @@ app.http('resume', {
             // os.tmpdir() gives C:\Users\AppData\Local\Temp on Windows and /tmp on Linux
             const runId = Math.random().toString(36).substring(7);
             const inputPath = path.join(os.tmpdir(), `${runId}.tex`);
-            const outputDir = os.tmpdir(); 
+            const outputDir = os.tmpdir();
             const outputPath = path.join(outputDir, `${runId}.pdf`);
 
             // 3. Write Tex to Temp File
@@ -339,12 +339,12 @@ app.http('resume', {
 
             // 4. Permissions (Only needed for Linux)
             if (!isWindows) {
-                try { fs.chmodSync(tectonicPath, '755'); } catch (e) {}
+                try { fs.chmodSync(tectonicPath, '755'); } catch (e) { }
             }
 
             // 5. Run Tectonic
             await execFilePromise(tectonicPath, [inputPath, '--outdir', outputDir]);
-            
+
             console.log(`[TIMER] Compilation took: ${Date.now() - compileStart}ms`);
 
             // 6. Read Result
@@ -366,16 +366,16 @@ app.http('resume', {
             });
 
             // 8. Cleanup
-            try { 
-                fs.unlinkSync(inputPath); 
-                fs.unlinkSync(outputPath); 
-            } catch(e) {}
+            try {
+                fs.unlinkSync(inputPath);
+                fs.unlinkSync(outputPath);
+            } catch (e) { }
 
             console.log(`[TIMER] Total Time: ${Date.now() - totalStart}ms`);
 
             return new Response(pdfBuffer, {
                 status: 200,
-                headers: { 
+                headers: {
                     'Content-Type': 'application/pdf',
                     'X-File-Name': filePath
                 }
@@ -391,23 +391,86 @@ app.http('tex', {
     methods: ['POST'],
     authLevel: 'anonymous',
     handler: async (req) => {
+        const totalStart = Date.now();
         try {
             const reqBody = await req.json();
-            if (!reqBody) {
-                return new Response("No resume data provided", { status: 400 });
-            }
-            const resumeData = reqBody;
+            if (!reqBody) return new Response("No data", { status: 400 });
 
-            const texString = renderResume(resumeData);
-            return new Response(texString, {
-                status: 200,
+            const texString = renderResume(reqBody);
+
+            // 1. Determine Paths
+            const isWindows = process.platform === 'win32';
+            const binaryName = isWindows ? 'tectonic-windows.exe' : 'tectonic-linux';
+            const sourceBinary = path.join(__dirname, binaryName);
+
+            // Use a FIXED name in /tmp so we can reuse it across requests
+            const cachedBinaryPath = path.join(os.tmpdir(), 'tectonic-global');
+
+            // 2. Setup IO Paths
+            const runId = Math.random().toString(36).substring(7);
+            const inputPath = path.join(os.tmpdir(), `${runId}.tex`);
+            const outputDir = os.tmpdir();
+            const outputPath = path.join(outputDir, `${runId}.pdf`);
+
+            // 3. Smart Binary Prep (The Fix)
+            let executablePath = sourceBinary;
+
+            if (!isWindows) {
+                executablePath = cachedBinaryPath;
+
+                // ONLY copy if it's not there (Cold Start)
+                if (!fs.existsSync(cachedBinaryPath)) {
+                    console.log(`[INIT] Copying binary to /tmp... (This happens only once per cold start)`);
+                    fs.copyFileSync(sourceBinary, cachedBinaryPath);
+                    fs.chmodSync(cachedBinaryPath, '755');
+                } else {
+                    console.log(`[INIT] Using cached binary. Zero copy.`);
+                }
+            }
+
+            // 4. Write Tex
+            fs.writeFileSync(inputPath, texString);
+
+            // 5. Run Tectonic
+            console.log(`[TIMER] Starting Compilation...`);
+            const compileStart = Date.now();
+
+            await execFilePromise(executablePath, [inputPath, '--outdir', outputDir]);
+
+            console.log(`[TIMER] Compilation took: ${Date.now() - compileStart}ms`);
+
+            // 6. Read Result
+            if (!fs.existsSync(outputPath)) {
+                throw new Error("PDF generation failed: Output file not found");
+            }
+            const pdfBuffer = fs.readFileSync(outputPath);
+
+            // 7. Upload & Response (Your existing logic)
+            const filePath = `${reqBody.github}-${reqBody.role}.pdf`;
+            const uploadUrl = `${SUPABASE_URL}/${BUCKET}/${encodeURIComponent(filePath)}`;
+
+            await axios.put(uploadUrl, pdfBuffer, {
                 headers: {
-                    'Content-Type': 'application/x-tex',
-                    'X-File-Name': `${resumeData.github}-${resumeData.role}.tex`
+                    'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
+                    'Content-Type': 'application/pdf'
                 }
             });
+
+            // 8. Cleanup ONLY the tex/pdf files, NOT the binary
+            try {
+                fs.unlinkSync(inputPath);
+                fs.unlinkSync(outputPath);
+            } catch (e) { }
+
+            console.log(`[TIMER] Total Time: ${Date.now() - totalStart}ms`);
+
+            return new Response(pdfBuffer, {
+                status: 200,
+                headers: { 'Content-Type': 'application/pdf' }
+            });
+
         } catch (error) {
-            return new Response(`Error generating LaTeX: ${error.message}`, { status: 500 });
+            return new Response(`Error: ${error.message}`, { status: 500 });
         }
     }
 });

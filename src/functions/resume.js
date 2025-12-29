@@ -358,21 +358,32 @@ app.http('resume', {
     methods: ['POST'],
     authLevel: 'anonymous',
     handler: async (req) => {
+        const totalStart = Date.now(); // TIMER: Start Tracking
         try {
+            console.log("[TIMER] Started Request Processing");
+
+            const reqBodyStart = Date.now(); // TIMER: JSON Parse Start
             const reqBody = await req.json();
+            console.log(`[TIMER] JSON Parse & Body Read: ${Date.now() - reqBodyStart}ms`);
+            
             if (!reqBody) {
                 return new Response("No resume data provided", { status: 400 });
             }
 
             const resumeData = reqBody;
 
+            const renderStart = Date.now(); // TIMER: Latex Render Start
             const texString = renderResume(resumeData);
+            console.log(`[TIMER] Latex String Generation: ${Date.now() - renderStart}ms`);
 
             const form = new FormData();
             form.append("filecontents[]", texString);
             form.append("filename[]", "document.tex");
             form.append("engine", "pdflatex");
             form.append("return", "pdf");
+
+            console.log("[TIMER] Starting texlive.net request...");
+            const texLiveStart = Date.now(); // TIMER: TexLive Request Start
 
             const response = await axios.post(
                 "https://texlive.net/cgi-bin/latexcgi",
@@ -383,6 +394,8 @@ app.http('resume', {
                 }
             );
 
+            console.log(`[TIMER] texlive.net API Response: ${Date.now() - texLiveStart}ms`); // CRITICAL LOG
+
             if (response.status !== 200) {
                 return new Response("Failed to render resume", { status: response.status });
             }
@@ -390,6 +403,9 @@ app.http('resume', {
             const filePath = `${resumeData.github}-${resumeData.role}.pdf`;
             const pdfBuffer = Buffer.from(response.data);
             const uploadUrl = `${SUPABASE_URL}/${BUCKET}/${encodeURIComponent(filePath)}`;
+
+            console.log("[TIMER] Starting Supabase Upload...");
+            const uploadStart = Date.now(); // TIMER: Supabase Upload Start
 
             const uploadResponse = await axios.put(
                 uploadUrl,
@@ -403,9 +419,13 @@ app.http('resume', {
                 }
             );
 
+            console.log(`[TIMER] Supabase Upload: ${Date.now() - uploadStart}ms`);
+
             if (uploadResponse.status !== 200) {
                 return new Response("Failed to upload PDF", { status: uploadResponse.status });
             }
+
+            console.log(`[TIMER] TOTAL EXECUTION TIME: ${Date.now() - totalStart}ms`);
 
             return new Response(pdfBuffer, {
                 status: 200,
@@ -416,6 +436,7 @@ app.http('resume', {
             });
 
         } catch (error) {
+            console.error(`[TIMER] Error occurred after: ${Date.now() - totalStart}ms`);
             return new Response(`Error rendering resume: ${error.message}`, { status: 500 });
         }
     }

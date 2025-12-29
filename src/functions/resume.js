@@ -319,85 +319,6 @@ app.http('resume', {
 
             const texString = renderResume(reqBody);
 
-            // 1. Determine OS and Select Binary
-            const isWindows = process.platform === 'win32';
-            const binaryName = isWindows ? 'tectonic-windows.exe' : 'tectonic-linux';
-            const tectonicPath = path.join(__dirname, binaryName);
-
-            // 2. Setup Cross-Platform Temp Paths
-            // os.tmpdir() gives C:\Users\AppData\Local\Temp on Windows and /tmp on Linux
-            const runId = Math.random().toString(36).substring(7);
-            const inputPath = path.join(os.tmpdir(), `${runId}.tex`);
-            const outputDir = os.tmpdir();
-            const outputPath = path.join(outputDir, `${runId}.pdf`);
-
-            // 3. Write Tex to Temp File
-            fs.writeFileSync(inputPath, texString);
-
-            console.log(`[TIMER] Starting Local Compilation on ${process.platform}...`);
-            const compileStart = Date.now();
-
-            // 4. Permissions (Only needed for Linux)
-            if (!isWindows) {
-                try { fs.chmodSync(tectonicPath, '755'); } catch (e) { }
-            }
-
-            // 5. Run Tectonic
-            await execFilePromise(tectonicPath, [inputPath, '--outdir', outputDir]);
-
-            console.log(`[TIMER] Compilation took: ${Date.now() - compileStart}ms`);
-
-            // 6. Read Result
-            if (!fs.existsSync(outputPath)) {
-                throw new Error("PDF generation failed: Output file not found");
-            }
-            const pdfBuffer = fs.readFileSync(outputPath);
-
-            // 7. Upload (Keep existing logic)
-            const filePath = `${reqBody.github}-${reqBody.role}.pdf`;
-            const uploadUrl = `${SUPABASE_URL}/${BUCKET}/${encodeURIComponent(filePath)}`;
-
-            // IMPORTANT: Await this on Azure Consumption to prevent freezing
-            await axios.put(uploadUrl, pdfBuffer, {
-                headers: {
-                    'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
-                    'Content-Type': 'application/pdf'
-                }
-            });
-
-            // 8. Cleanup
-            try {
-                fs.unlinkSync(inputPath);
-                fs.unlinkSync(outputPath);
-            } catch (e) { }
-
-            console.log(`[TIMER] Total Time: ${Date.now() - totalStart}ms`);
-
-            return new Response(pdfBuffer, {
-                status: 200,
-                headers: {
-                    'Content-Type': 'application/pdf',
-                    'X-File-Name': filePath
-                }
-            });
-
-        } catch (error) {
-            return new Response(`Error: ${error.message}`, { status: 500 });
-        }
-    }
-});
-
-app.http('tex', {
-    methods: ['POST'],
-    authLevel: 'anonymous',
-    handler: async (req) => {
-        const totalStart = Date.now();
-        try {
-            const reqBody = await req.json();
-            if (!reqBody) return new Response("No data", { status: 400 });
-
-            const texString = renderResume(reqBody);
-
             // 1. Determine Paths
             const isWindows = process.platform === 'win32';
             const binaryName = isWindows ? 'tectonic-windows.exe' : 'tectonic-linux';
@@ -471,6 +392,31 @@ app.http('tex', {
 
         } catch (error) {
             return new Response(`Error: ${error.message}`, { status: 500 });
+        }
+    }
+});
+
+app.http('tex', {
+    methods: ['POST'],
+    authLevel: 'anonymous',
+    handler: async (req) => {
+        try {
+            const reqBody = await req.json();
+            if (!reqBody) {
+                return new Response("No resume data provided", { status: 400 });
+            }
+            const resumeData = reqBody;
+
+            const texString = renderResume(resumeData);
+            return new Response(texString, {
+                status: 200,
+                headers: {
+                    'Content-Type': 'application/x-tex',
+                    'X-File-Name': `${resumeData.github}-${resumeData.role}.tex`
+                }
+            });
+        } catch (error) {
+            return new Response(`Error generating LaTeX: ${error.message}`, { status: 500 });
         }
     }
 });

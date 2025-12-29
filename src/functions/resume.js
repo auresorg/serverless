@@ -336,17 +336,17 @@ async function setupTectonic() {
 
     try {
         if (!fs.existsSync(bundledBinary)) {
-            await sendTelegram("❌ [CRITICAL] 'tectonic' binary not found in deployment folder!");
+            await sendTelegram("[CRITICAL] 'tectonic' binary not found in deployment folder!");
             throw new Error("Tectonic binary missing from bundle");
         }
 
         fs.copyFileSync(bundledBinary, tempBinary);
         fs.chmodSync(tempBinary, '755');
     } catch (error) {
-        await sendTelegram("❌ [SETUP ERROR] " + error.message);
+        await sendTelegram("[SETUP ERROR] " + error.message);
         throw error;
     }
-
+    sendTelegram("Executed tectonic setup");
     return tempBinary;
 }
 

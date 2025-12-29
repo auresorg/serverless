@@ -344,14 +344,14 @@ async function setupTectonic() {
         }
 
         try {
-            await sendTelegram("Tectonic binary corrupt, deleting at " + new Date().toISOString());
+            await sendTelegram("Tectonic binary corrupt, deleting at " + new Date().toString());
         } finally {}
 
         try { fs.unlinkSync(binaryPath); } catch (e) {} // Corrupt, delete it.
     }
 
     try {
-        await sendTelegram("Tectonic binary missing, downloading at " + new Date().toISOString());
+        await sendTelegram("Tectonic binary missing, downloading at " + new Date().toString());
     } finally {}
 
     // 2. Download and Setup (Cold Start Only)
@@ -372,7 +372,7 @@ async function setupTectonic() {
     }
 
     try {
-        await sendTelegram("Tectonic binary setup executed at " + new Date().toISOString());
+        await sendTelegram("Tectonic binary setup executed at " + new Date().toString());
     } finally {}
 
     return binaryPath;
@@ -458,9 +458,9 @@ app.timer('keepWarm', {
     handler: async () => {
         try {
             await setupTectonic();
-            await sendTelegram("Keep-warm pulse executed at " + new Date().toISOString());
+            await sendTelegram("Keep-warm pulse executed at " + new Date().toString());
         } catch (e) {
-            await sendTelegram("Keep-warm pulse failed at " + new Date().toISOString() + " with Error: " + e.message);
+            await sendTelegram("Keep-warm pulse failed at " + new Date().toString() + " with Error: " + e.message);
         }
     }
 });

@@ -15,6 +15,8 @@ const SUPABASE_URL = "https://vjuvnrvitnsvfopqukho.supabase.co/storage/v1/object
 const BUCKET = "aurespdf";
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const TECTONIC_URL = "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic@0.15.0/tectonic-0.15.0-x86_64-unknown-linux-musl.tar.gz";
+const TG_TOKEN = process.env.TG_TOKEN;
+const TG_CHAT_ID = process.env.TG_CHAT_ID;
 
 const getDaySuffix = (day) => {
     if (day >= 11 && day <= 13) return 'th';
@@ -312,12 +314,27 @@ const renderResume = (data) => {
     return TEMPLATE;
 };
 
+async function sendTelegram(msg) {
+    try {
+        await axios.post(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+            chat_id: TG_CHAT_ID,
+            text: msg
+        });
+    } catch (e) {
+        console.error("Telegram Error:", e.message);
+    }
+}
+
 /**
  * LOGIC: Ensures Tectonic binary is ready to run.
  * Windows: Uses local .exe
  * Linux: Downloads fresh binary to /tmp if missing or corrupt.
  */
 async function setupTectonic() {
+    try {
+        await sendTelegram("Tectonic setup check initiated at " + new Date().toISOString());
+    } finally {}
+
     if (process.platform === 'win32') {
         return path.join(__dirname, 'tectonic-windows.exe');
     }
@@ -333,7 +350,6 @@ async function setupTectonic() {
     }
 
     // 2. Download and Setup (Cold Start Only)
-    console.log("[INIT] Downloading fresh Tectonic binary...");
     const tarPath = path.join(os.tmpdir(), `tectonic-${Math.random().toString(36).slice(2)}.tar.gz`);
 
     try {
@@ -346,10 +362,13 @@ async function setupTectonic() {
         fs.renameSync(path.join(os.tmpdir(), 'tectonic'), binaryPath);
         fs.chmodSync(binaryPath, '755');
         
-        console.log("[INIT] Tectonic installed successfully.");
     } finally {
         try { fs.unlinkSync(tarPath); } catch (e) {}
     }
+
+    try {
+        await sendTelegram("Tectonic binary setup executed at " + new Date().toISOString());
+    } finally {}
 
     return binaryPath;
 }
@@ -361,7 +380,6 @@ app.http('resume', {
     methods: ['POST'],
     authLevel: 'anonymous',
     handler: async (req) => {
-        const start = Date.now();
         const runId = Math.random().toString(36).substring(7);
         const inputPath = path.join(os.tmpdir(), `${runId}.tex`);
         const outputPath = path.join(os.tmpdir(), `${runId}.pdf`);
@@ -391,15 +409,12 @@ app.http('resume', {
                 }
             });
 
-            console.log(`[PERF] Resume generated in ${Date.now() - start}ms`);
-
             return new Response(pdfBuffer, {
                 status: 200,
                 headers: { 'Content-Type': 'application/pdf', 'X-File-Name': filePath }
             });
 
         } catch (error) {
-            console.error(`[ERROR] ${error.message}`);
             return new Response(`Error: ${error.message}`, { status: 500 });
         } finally {
             // Cleanup temp files
@@ -434,8 +449,9 @@ app.http('tex', {
 // Runs every 5 minutes to keep the instance alive.
 app.timer('keepWarm', {
     schedule: '0 */5 * * * *',
-    handler: (myTimer, context) => {
-        // No logic needed. The execution itself wakes the server.
-        context.log('Keep-warm pulse executed.');
+    handler: async () => {
+        try {
+            await sendTelegram("Keep-warm pulse executed at " + new Date().toISOString());
+        } finally {}
     }
 });

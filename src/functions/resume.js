@@ -1,12 +1,14 @@
 const { app } = require("@azure/functions");
 const { execFile } = require('child_process');
-
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const util = require('util');
-const execFilePromise = util.promisify(execFile);
+const stream = require('stream'); 
 const axios = require('axios');
+
+const execFilePromise = util.promisify(execFile);
+const pipeline = util.promisify(stream.pipeline);
 
 const SUPABASE_URL = "https://vjuvnrvitnsvfopqukho.supabase.co/storage/v1/object";
 const BUCKET = "aurespdf";
@@ -317,45 +319,75 @@ app.http('resume', {
             const reqBody = await req.json();
             if (!reqBody) return new Response("No data", { status: 400 });
 
-            const texString = renderResume(reqBody);
+            // 1. Generate Latex
+            // Ensure renderResume is defined above!
+            // If you copy-pasted this, make sure you didn't delete the renderResume function block.
+            // For this fix, I assume renderResume is still in your file.
+            // If you get "renderResume is not defined", paste your renderResume function back in.
 
-            // 1. Determine Paths
+            // To be safe, I will re-inject a minimal renderResume call assuming you kept the function:
+            let texString = "";
+            try {
+                texString = renderResume(reqBody);
+            } catch (e) {
+                // Fallback if function missing during copy-paste
+                return new Response("renderResume function missing in code", { status: 500 });
+            }
+
+            // 2. Setup Paths
             const isWindows = process.platform === 'win32';
-            const binaryName = isWindows ? 'tectonic-windows.exe' : 'tectonic-linux';
-            const sourceBinary = path.join(__dirname, binaryName);
-
-            // Use a FIXED name in /tmp so we can reuse it across requests
-            const cachedBinaryPath = path.join(os.tmpdir(), 'tectonic-global');
-
-            // 2. Setup IO Paths
             const runId = Math.random().toString(36).substring(7);
             const inputPath = path.join(os.tmpdir(), `${runId}.tex`);
             const outputDir = os.tmpdir();
             const outputPath = path.join(outputDir, `${runId}.pdf`);
 
-            // 3. Smart Binary Prep (The Fix)
-            let executablePath = sourceBinary;
+            // 3. EXECUTION LOGIC (The Fix)
+            let executablePath;
 
-            if (!isWindows) {
-                executablePath = cachedBinaryPath;
+            if (isWindows) {
+                // LOCAL WINDOWS: Use the local file you have
+                executablePath = path.join(__dirname, 'tectonic-windows.exe');
+            } else {
+                // AZURE LINUX: Download fresh to avoid upload corruption
+                const cachedBinary = path.join(os.tmpdir(), 'tectonic-linux-downloaded');
 
-                // ONLY copy if it's not there (Cold Start)
-                if (!fs.existsSync(cachedBinaryPath)) {
-                    console.log(`[INIT] Copying binary to /tmp... (This happens only once per cold start)`);
-                    fs.copyFileSync(sourceBinary, cachedBinaryPath);
-                    fs.chmodSync(cachedBinaryPath, '755');
-                } else {
-                    console.log(`[INIT] Using cached binary. Zero copy.`);
+                if (!fs.existsSync(cachedBinary)) {
+                    console.log("[INIT] Downloading Tectonic binary (First Run Only)...");
+
+                    // URL for the official Linux Musl binary
+                    const url = "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic@0.15.0/tectonic-0.15.0-x86_64-unknown-linux-musl.tar.gz";
+                    const tarPath = path.join(os.tmpdir(), 'tectonic.tar.gz');
+
+                    // A. Download
+                    const response = await axios.get(url, { responseType: 'stream' });
+                    await pipeline(response.data, fs.createWriteStream(tarPath));
+
+                    // B. Extract (Azure Linux has 'tar' installed)
+                    console.log("[INIT] Extracting binary...");
+                    await execFilePromise('tar', ['-xzf', tarPath, '-C', os.tmpdir()]);
+
+                    // The tar contains a file named 'tectonic'. We rename it to avoid conflicts.
+                    const extractedFile = path.join(os.tmpdir(), 'tectonic');
+                    fs.renameSync(extractedFile, cachedBinary);
+
+                    // C. Cleanup Tar
+                    fs.unlinkSync(tarPath);
+
+                    // D. Permission
+                    fs.chmodSync(cachedBinary, '755');
+                    console.log("[INIT] Setup Complete.");
                 }
+                executablePath = cachedBinary;
             }
 
-            // 4. Write Tex
+            // 4. Write Tex to Temp File
             fs.writeFileSync(inputPath, texString);
 
-            // 5. Run Tectonic
             console.log(`[TIMER] Starting Compilation...`);
             const compileStart = Date.now();
 
+            // 5. Run Tectonic
+            // We pass the executable path we prepared above
             await execFilePromise(executablePath, [inputPath, '--outdir', outputDir]);
 
             console.log(`[TIMER] Compilation took: ${Date.now() - compileStart}ms`);
@@ -366,7 +398,8 @@ app.http('resume', {
             }
             const pdfBuffer = fs.readFileSync(outputPath);
 
-            // 7. Upload & Response (Your existing logic)
+            // 7. Upload to Supabase (FIRE AND FORGET - No Await for speed, Await for safety)
+            // We await it here to be safe on Azure Consumption
             const filePath = `${reqBody.github}-${reqBody.role}.pdf`;
             const uploadUrl = `${SUPABASE_URL}/${BUCKET}/${encodeURIComponent(filePath)}`;
 
@@ -377,20 +410,22 @@ app.http('resume', {
                 }
             });
 
-            // 8. Cleanup ONLY the tex/pdf files, NOT the binary
+            // 8. Cleanup
             try {
                 fs.unlinkSync(inputPath);
                 fs.unlinkSync(outputPath);
             } catch (e) { }
 
-            console.log(`[TIMER] Total Time: ${Date.now() - totalStart}ms`);
-
             return new Response(pdfBuffer, {
                 status: 200,
-                headers: { 'Content-Type': 'application/pdf' }
+                headers: {
+                    'Content-Type': 'application/pdf',
+                    'X-File-Name': filePath
+                }
             });
 
         } catch (error) {
+            console.error(error);
             return new Response(`Error: ${error.message}`, { status: 500 });
         }
     }

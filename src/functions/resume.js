@@ -459,6 +459,56 @@ app.http("cusres", {
     },
 });
 
+app.http("cusresd", {
+    methods: ["POST"],
+    authLevel: "anonymous",
+    handler: async (req) => {
+        const runId = Math.random().toString(36).substring(7);
+        const inputPath = path.join(os.tmpdir(), `${runId}.tex`);
+        const outputPath = path.join(os.tmpdir(), `${runId}.pdf`);
+
+        try {
+            const reqBody = await req.json();
+            if (!reqBody || !reqBody.role) {
+                return new Response("Missing slug", { status: 400 });
+            }
+
+            // slug is the ONLY identifier
+            const slug = reqBody.role;
+
+            const texString = renderResume(reqBody);
+            const executable = await setupTectonic();
+
+            fs.writeFileSync(inputPath, texString);
+            await execFilePromise(executable, [inputPath, "--outdir", os.tmpdir()]);
+
+            if (!fs.existsSync(outputPath)) {
+                throw new Error("PDF output missing");
+            }
+
+            const pdfBuffer = fs.readFileSync(outputPath);
+
+            // ✅ canonical filename
+            const filePath = `${slug}.pdf`;
+
+            return new Response(pdfBuffer, {
+                status: 200,
+                headers: {
+                    "Content-Type": "application/pdf",
+                    "X-File-Name": filePath,
+                },
+            });
+        } catch (error) {
+            return new Response(`Error: ${error.message}`, { status: 500 });
+        } finally {
+            try {
+                fs.unlinkSync(inputPath);
+                fs.unlinkSync(outputPath);
+            } catch { }
+        }
+    },
+});
+
 // 2. TEX DEBUGGER
 app.http('tex', {
     methods: ['POST'],

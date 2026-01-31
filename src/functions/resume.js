@@ -555,14 +555,3 @@ app.http("custex", {
         }
     },
 });
-
-// app.timer('keepWarm', {
-//     schedule: '0 */5 8-22 * * *',
-//     handler: async () => {
-//         try {
-//             await setupTectonic();
-//         } catch (e) {
-//             await sendTelegram("Keep-warm pulse failed at " + new Date().toString() + " with Error: " + e.message);
-//         }
-//     }
-// });

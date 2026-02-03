@@ -63,6 +63,7 @@ const renderResume = (data) => {
         \usepackage{fancyhdr}
         \usepackage[english]{babel}
         \usepackage{tabularx}
+        \usepackage{truncate}
 
         \pagestyle{fancy}
         \fancyhf{} 
@@ -223,8 +224,8 @@ const renderResume = (data) => {
             if (project.title) {
                 TEMPLATE += String.raw`
                 \resumeProjectHeading
-                    {\textbf{${project.url ? String.raw`\href{${project.url}}{${project.title}}` : project.title}} $|$ \emph{${project.skills.join(', ')}}}{}
-            `;
+                    {\truncate{0.97\textwidth}{\textbf{${project.url ? String.raw`\href{${project.url}}{${project.title}}` : project.title}} $|$ \emph{${project.skills.join(', ')}}}}{}
+                `;
 
                 if (project.highlights && project.highlights.length > 0) {
                     TEMPLATE += String.raw`

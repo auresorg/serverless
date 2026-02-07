@@ -1,5 +1,7 @@
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
+const axios = require('axios');
 
 const TG_TOKEN = process.env.TG_TOKEN;
 const TG_CHAT_ID = process.env.TG_CHAT_ID;

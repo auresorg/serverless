@@ -36,8 +36,26 @@ const formatDate = (dateStr, includeDay = false) => {
 };
 
 const renderResume = (data) => {
+
+    const escapeLatex = (v) => {
+        if (v == null) return "";
+        return String(v).replace(/[\\&%$#_{}~^]/g, (m) => ({
+            '\\': '\\textbackslash{}',
+            '&': '\\&',
+            '%': '\\%',
+            '$': '\\$',
+            '#': '\\#',
+            '_': '\\_',
+            '{': '\\{',
+            '}': '\\}',
+            '~': '\\textasciitilde{}',
+            '^': '\\textasciicircum{}',
+        }[m]));
+    };
+
     const safeGet = (obj, path, defaultValue = '') => {
-        return path.split('.').reduce((acc, key) => (acc && acc[key] !== undefined ? acc[key] : defaultValue), obj);
+        const value = path.split('.').reduce((acc, key) => (acc && acc[key] !== undefined ? acc[key] : defaultValue), obj);
+        return typeof value === 'string' ? escapeLatex(value) : value;
     };
 
     let TEMPLATE = String.raw`

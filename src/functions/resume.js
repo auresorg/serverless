@@ -1,10 +1,18 @@
+const path = require('path');
 const { app } = require("@azure/functions");
 const { execFile } = require('child_process');
 const fs = require('fs');
-const path = require('path');
 const os = require('os');
 const util = require('util');
 const axios = require('axios');
+const { renderResume, setupTectonic } = require("../utils");
+const { Client } = require('pg');
+const { createClient } = require('@vercel/kv');
+
+const kv = createClient({
+    url: process.env.KV_REST_API_URL,
+    token: process.env.KV_REST_API_TOKEN,
+});
 
 const execFilePromise = util.promisify(execFile);
 
@@ -12,502 +20,116 @@ const execFilePromise = util.promisify(execFile);
 const SUPABASE_URL = "https://vjuvnrvitnsvfopqukho.supabase.co/storage/v1/object";
 const BUCKET = "aurespdf";
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const TG_TOKEN = process.env.TG_TOKEN;
-const TG_CHAT_ID = process.env.TG_CHAT_ID;
 
-const getDaySuffix = (day) => {
-    if (day >= 11 && day <= 13) return 'th';
-    switch (day % 10) {
-        case 1: return 'st';
-        case 2: return 'nd';
-        case 3: return 'rd';
-        default: return 'th';
-    }
-};
+const ESCAPE_MAP = { '\\': '\\textbackslash', '&': '\\&', '%': '\\%', '$': '\\$', '#': '\\#', '_': '\\_', '{': '\\{', '}': '\\}', '~': '\\textasciitilde', '^': '\\textasciicircum' };
+const safe = (v) => v == null ? "" : String(v).replace(/[\\&%$#_{}~^]/g, m => ESCAPE_MAP[m]);
 
-const formatDate = (dateStr, includeDay = false) => {
-    if (!dateStr) return '';
-    if (dateStr === 'null' || dateStr === null) return '';
-
-    const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return dateStr;
-
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-    const day = date.getDate();
-    const month = months[date.getMonth()];
-    const year = date.getFullYear();
-
-    return includeDay
-        ? `${day}${getDaySuffix(day)} ${month}, ${year}`
-        : `${month} ${year}`;
-};
-
-const renderResume = (data) => {
-    const safeGet = (obj, path, defaultValue = '') => {
-        return path.split('.').reduce((acc, key) => (acc && acc[key] !== undefined ? acc[key] : defaultValue), obj);
-    };
-
-    let TEMPLATE = String.raw`
-        \documentclass[letterpaper,11pt]{article}
-
-        \usepackage{latexsym}
-        \usepackage[margin=1in]{geometry}
-        \usepackage{titlesec}
-        \usepackage{marvosym}
-        \usepackage[usenames,dvipsnames]{color}
-        \usepackage{verbatim}
-        \usepackage{enumitem}
-        \usepackage[hidelinks]{hyperref}
-        \usepackage{fancyhdr}
-        \usepackage[english]{babel}
-        \usepackage{tabularx}
-        \usepackage{truncate}
-
-        \pagestyle{fancy}
-        \fancyhf{} 
-        \fancyfoot{}
-        \renewcommand{\headrulewidth}{0pt}
-        \renewcommand{\footrulewidth}{0pt}
-
-        \addtolength{\oddsidemargin}{-0.5in}
-        \addtolength{\evensidemargin}{-0.5in}
-        \addtolength{\textwidth}{1in}
-        \addtolength{\topmargin}{-.5in}
-        \addtolength{\textheight}{1.0in}
-
-        \urlstyle{same}
-
-        \raggedbottom
-        \raggedright
-        \setlength{\tabcolsep}{0in}
-
-        \titleformat{\section}{
-        \vspace{-4pt}\scshape\raggedright\large
-        }{}{0em}{}[\color{black}\titlerule \vspace{-5pt}]
-
-
-        \newcommand{\resumeItem}[1]{
-        \item\small{
-            {#1 \vspace{-2pt}}
-        }
-        }
-
-        \newcommand{\resumeSubheading}[4]{
-        \vspace{-2pt}\item
-            \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
-            \textbf{#1} & #2 \\
-            \textit{\small#3} & \textit{\small #4} \\
-            \end{tabular*}\vspace{-7pt}
-        }
-
-        \newcommand{\resumeSubSubheading}[2]{
-            \item
-            \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
-            \textit{\small#1} & \textit{\small #2} \\
-            \end{tabular*}\vspace{-7pt}
-        }
-
-        \newcommand{\resumeProjectHeading}[2]{
-            \item
-            \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
-            \small#1 & #2 \\
-            \end{tabular*}\vspace{-7pt}
-        }
-
-        \newcommand{\resumeSubItem}[1]{\resumeItem{#1}\vspace{-4pt}}
-
-        \renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}
-
-        \newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0.15in, label={}]}
-        \newcommand{\resumeSubHeadingListEnd}{\end{itemize}}
-        \newcommand{\resumeItemListStart}{\begin{itemize}}
-        \newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-5pt}}
-
-        \begin{document}
-
-        %----------HEADING----------
-        \begin{center}
-            \textbf{\Huge \scshape ${safeGet(data, 'name')}} \\ \vspace{1pt}
-            \small
-            ${(() => {
-            const items = [];
-            if (safeGet(data, 'portfolio')) {
-                items.push(String.raw`\href{${safeGet(data, 'portfolio')}}{\underline{${safeGet(data, 'portfolio').replace(/^https?:\/\//, '')}}}`);
-            }
-            if (safeGet(data, 'email')) {
-                items.push(String.raw`\href{mailto:${safeGet(data, 'email')}}{\underline{${safeGet(data, 'email')}}}`);
-            }
-            if (safeGet(data, 'linkedin')) {
-                try {
-                    const url = new URL(safeGet(data, 'linkedin'));
-                    items.push(String.raw`\href{${safeGet(data, 'linkedin')}}{\underline{${url.hostname + url.pathname}}}`);
-                } catch { }
-            }
-            if (safeGet(data, 'github')) {
-                items.push(String.raw`\href{https://github.com/${safeGet(data, 'github')}}{\underline{github.com/${safeGet(data, 'github')}}}`);
-            }
-            if (safeGet(data, 'leetcode')) {
-                try {
-                    const url = new URL(safeGet(data, 'leetcode'));
-                    items.push(String.raw`\href{${safeGet(data, 'leetcode')}}{\underline{${url.hostname + url.pathname}}}`);
-                } catch { }
-            }
-            if (safeGet(data, 'phone')) {
-                items.push(safeGet(data, 'phone'));
-            }
-            return items.slice(0, 4).map(item => item.trim()).join(' $|$ ');
-        })()
-        }
-        \end{center}
-    `;
-
-    if (safeGet(data, 'education') && safeGet(data, 'education.name')) {
-        TEMPLATE += String.raw`
-        \section{Education}
-        \resumeSubHeadingListStart
-            \resumeSubheading
-            {${safeGet(data, 'education.name')}}{${safeGet(data, 'education.location')}}
-            {${safeGet(data, 'education.degree')} ${safeGet(data, 'education.course')}}
-            {${formatDate(safeGet(data, 'education.from'))} -- ${safeGet(data, 'education.to') ? formatDate(safeGet(data, 'education.to')) : 'Present'}} 
-        `;
-
-        if (safeGet(data, 'education.score') && safeGet(data, 'education.maxscore')) {
-            TEMPLATE += String.raw`
-            \resumeItemListStart
-                \resumeItem{Scored: ${safeGet(data, 'education.score')} of ${safeGet(data, 'education.maxscore')}}
-            \resumeItemListEnd
-            `;
-        }
-
-        TEMPLATE += String.raw`
-        \resumeSubHeadingListEnd
-        `;
-    }
-
-    if (safeGet(data, 'courses') && data.courses.length > 0) {
-        TEMPLATE += String.raw`
-        \section{Certifications}
-        \resumeSubHeadingListStart
-        `;
-
-        for (const course of data.courses) {
-            TEMPLATE += String.raw`
-                \resumeSubheading
-                    {${course.title}}{${formatDate(course.started_at)} -- ${course.completed_at ? formatDate(course.completed_at) : 'Present'}}
-                    {${course.provider}}{}
-                `;
-
-            if (course.highlights && course.highlights.length > 0) {
-                TEMPLATE += String.raw`
-                \resumeItemListStart
-                    ${course.highlights
-                        .map((highlight) => String.raw`\resumeItem{${highlight}}`)
-                        .join("")}
-                \resumeItemListEnd`;
-            }
-        }
-
-        TEMPLATE += String.raw`
-        \resumeSubHeadingListEnd
-        `;
-    }
-
-    if (safeGet(data, 'projects') && data.projects.length > 0) {
-        TEMPLATE += String.raw`
-        \section{Projects}
-            \resumeSubHeadingListStart
-        `;
-
-        for (const project of data.projects) {
-            if (project.title) {
-                TEMPLATE += String.raw`
-                \resumeProjectHeading
-                    {\truncate{0.97\textwidth}{\textbf{${project.url ? String.raw`\href{${project.url}}{${project.title}}` : project.title}} $|$ \emph{${project.skills.join(', ')}}}}{}
-                `;
-
-                if (project.highlights && project.highlights.length > 0) {
-                    TEMPLATE += String.raw`
-                    \resumeItemListStart
-                        ${project.highlights
-                            .filter(highlight => highlight)
-                            .map((highlight) => String.raw`\resumeItem{${highlight}}`)
-                            .join("")}
-                    \resumeItemListEnd
-                `;
-                }
-            }
-        }
-
-        TEMPLATE += String.raw` 
-            \resumeSubHeadingListEnd
-        `;
-    }
-
-    if (safeGet(data, 'awards') && data.awards.length > 0) {
-        TEMPLATE += String.raw`
-        \section{Awards}
-        \resumeSubHeadingListStart
-        `;
-
-        for (const award of data.awards) {
-            if (!award.title) continue;
-
-            TEMPLATE += String.raw`
-            \resumeSubheading
-                {${award.title}}{${formatDate(award.date)}}
-                {${award.issuer} \textnormal{\textit{-- ${award.type}}}}{}
-            `;
-
-            if (award.highlights && award.highlights.length > 0) {
-                TEMPLATE += String.raw`
-                \resumeItemListStart
-                    ${award.highlights
-                        .map((highlight) => String.raw`\resumeItem{${highlight}}`)
-                        .join("")}
-                \resumeItemListEnd
-                `;
-            }
-        }
-
-        TEMPLATE += String.raw`
-        \resumeSubHeadingListEnd
-        `;
-    }
-
-    if (safeGet(data, 'experiences') && data.experiences.length > 0) {
-        TEMPLATE += String.raw`
-        \section{Experience}
-        \resumeSubHeadingListStart
-        `;
-
-        for (const exp of data.experiences) {
-            TEMPLATE += String.raw`
-            \resumeSubheading
-                {${exp.title}}{${formatDate(exp.from_date)} -- ${exp.to_date ? formatDate(exp.to_date) : 'Present'}}
-                {${exp.company}}{${exp.location}}
-            `;
-
-            if (exp.highlights && exp.highlights.length > 0) {
-                TEMPLATE += String.raw`
-                \resumeItemListStart
-                    ${exp.highlights
-                        .map((highlight) => String.raw`\resumeItem{${highlight}}`)
-                        .join("")}
-                \resumeItemListEnd
-                `;
-            }
-        }
-
-        TEMPLATE += String.raw`
-        \resumeSubHeadingListEnd
-        `;
-    }
-
-    TEMPLATE += String.raw`
-    \end{document}
-    `;
-
-    return TEMPLATE;
-};
-
-async function sendTelegram(msg) {
+async function fetchFreshData(params) {
+    const client = new Client({ connectionString: process.env.DATABASE_URL });
+    await client.connect();
     try {
-        await axios.post(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
-            chat_id: TG_CHAT_ID,
-            text: msg
-        });
-    } catch (e) {
-        console.error("Telegram Error:", e.message);
-    }
-}
+        const { type, userId, role, slug } = params;
+        const userRes = await client.query('SELECT * FROM users WHERE id = $1', [userId]);
+        const user = userRes.rows[0];
+        if (!user) return null;
 
-async function setupTectonic() {
-    if (process.platform === 'win32') {
-        return path.join(__dirname, 'tectonic-windows.exe');
-    }
-
-    const bundledBinary = path.join(__dirname, 'tectonic');
-    const tempBinary = path.join(os.tmpdir(), 'tectonic-ready');
-
-    if (fs.existsSync(tempBinary)) {
-        return tempBinary;
-    }
-
-    try {
-        if (!fs.existsSync(bundledBinary)) {
-            await sendTelegram("[CRITICAL] 'tectonic' binary not found in deployment folder!");
-            throw new Error("Tectonic binary missing from bundle");
+        let data;
+        if (type === 'standard') {
+            const res = await client.query(`
+                SELECT 
+                    (SELECT row_to_json(e) FROM (SELECT school, degree, field, start_date, end_date, grade FROM education WHERE user_id = $1 LIMIT 1) e) AS edu,
+                    (SELECT json_agg(p) FROM (SELECT name, url, repo, tech, description, start_date, end_date FROM project WHERE user_id = $1 AND role = $2 ORDER BY start_date DESC) p) AS projects,
+                    (SELECT json_agg(c) FROM (SELECT title, platform, description, completed_on FROM certification WHERE user_id = $1 AND role = $2 ORDER BY completed_on DESC) c) AS certs,
+                    (SELECT json_agg(ex) FROM (SELECT title, company, start_date, end_date, description FROM experience WHERE user_id = $1 AND role = $2 ORDER BY start_date DESC) ex) AS exps,
+                    (SELECT json_agg(a) FROM (SELECT title, issuer, type, description, date FROM award WHERE user_id = $1 AND (role = $2 OR role IS NULL) ORDER BY date DESC) a) AS awards
+            `, [userId, role]);
+            data = res.rows[0];
+        } else {
+            const cRes = await client.query('SELECT * FROM cusres WHERE slug = $1', [slug]);
+            const config = cRes.rows[0];
+            if (!config) return null;
+            const res = await client.query(`
+                SELECT 
+                    (SELECT row_to_json(e) FROM (SELECT school, degree, field, start_date, end_date, grade FROM education WHERE user_id = $1 LIMIT 1) e) AS edu,
+                    (SELECT json_agg(p) FROM project p WHERE id = ANY($2::int[])) AS projects,
+                    (SELECT json_agg(c) FROM certification c WHERE id = ANY($3::int[])) AS certs,
+                    (SELECT json_agg(ex) FROM experience ex WHERE id = ANY($4::int[])) AS exps,
+                    (SELECT json_agg(a) FROM award a WHERE id = ANY($5::int[])) AS awards
+            `, [userId, config.projects, config.certifications, config.experiences, config.awards]);
+            data = res.rows[0];
         }
 
-        fs.copyFileSync(bundledBinary, tempBinary);
-        fs.chmodSync(tempBinary, '755');
-    } catch (error) {
-        await sendTelegram("[SETUP ERROR] " + error.message);
-        throw error;
-    }
-    sendTelegram("Executed tectonic setup");
-    return tempBinary;
+        return {
+            github: user.username, role: role || slug, name: `${user.firstname} ${user.lastname}`, email: safe(user.email),
+            linkedin: safe(user.linkedin), portfolio: safe(user.portfolio), leetcode: safe(user.leetcode),
+            education: data.edu ? { name: safe(data.edu.school), degree: safe(data.edu.degree), course: safe(data.edu.field), from: safe(data.edu.start_date), to: safe(data.edu.end_date), score: safe(data.edu.grade) } : null,
+            projects: (data.projects || []).map(p => ({ title: safe(p.name), url: safe(p.url || `https://github.com/${p.repo}`), skills: p.tech || [], highlights: [safe(p.description)], from_date: safe(p.start_date), to_date: safe(p.end_date) })),
+            courses: (data.certs || []).map(c => ({ title: safe(c.title), provider: safe(c.platform), completed_at: safe(c.completed_on), highlights: [safe(c.description)] })),
+            experiences: (data.exps || []).map(e => ({ title: safe(e.title), company: safe(e.company), from_date: safe(e.start_date), to_date: safe(e.end_date), highlights: [safe(e.description)] })),
+            awards: (data.awards || []).map(a => ({ title: safe(a.title), issuer: safe(a.issuer), type: safe(a.type), date: safe(a.date), highlights: [safe(a.description)] }))
+        };
+    } finally { await client.end(); }
 }
-
-// --- HANDLERS ---
 
 // 1. RESUME GENERATOR
 app.http('resume', {
     methods: ['POST'],
     authLevel: 'anonymous',
     handler: async (req) => {
-        const runId = Math.random().toString(36).substring(7);
-        const inputPath = path.join(os.tmpdir(), `${runId}.tex`);
-        const outputPath = path.join(os.tmpdir(), `${runId}.pdf`);
+        const requestId = Math.random().toString(36).substring(7);
+        const inputPath = path.join(os.tmpdir(), `${requestId}.tex`);
+        const outputPath = path.join(os.tmpdir(), `${requestId}.pdf`);
 
         try {
-            const reqBody = await req.json();
-            if (!reqBody) return new Response("No data", { status: 400 });
+            const body = await req.json();
+            const { type, userId, role, slug, username, mode } = body;
+            const isDownload = mode === 'download';
+            const lockKey = type === 'standard' ? `res:${userId}:${role}` : `cus:${slug}`;
 
-            const texString = renderResume(reqBody);
+            // 1. Debounce Logic: ONLY if not in immediate download mode
+            if (!isDownload) {
+                await kv.set(lockKey, requestId, { ex: 20 });
+                await new Promise(r => setTimeout(r, 5000));
+                if ((await kv.get(lockKey)) !== requestId) {
+                    return new Response("Superseded", { status: 200 });
+                }
+            }
 
+            // 2. Data Fetching
+            const payload = await fetchFreshData(body);
+            if (!payload) return new Response("Not found", { status: 404 });
+
+            // 3. Render and Compile
+            const texString = renderResume(payload);
             const executable = await setupTectonic();
-
             fs.writeFileSync(inputPath, texString);
-            await execFilePromise(executable, [inputPath, '--outdir', os.tmpdir()]);
 
-            if (!fs.existsSync(outputPath)) throw new Error("PDF Output missing");
+            await execFilePromise(executable, [inputPath, '--outdir', os.tmpdir()]);
+            if (!fs.existsSync(outputPath)) throw new Error("PDF failed to generate");
 
             const pdfBuffer = fs.readFileSync(outputPath);
-            const filePath = `${reqBody.github}-${reqBody.role}.pdf`;
+            const fileName = type === 'standard' ? `${username}-${role}.pdf` : `${slug}.pdf`;
 
-            await axios.put(`${SUPABASE_URL}/${BUCKET}/${encodeURIComponent(filePath)}`, pdfBuffer, {
-                headers: {
-                    'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
-                    'Content-Type': 'application/pdf'
-                }
-            });
+            // 4. Storage Logic: SKIP if download mode
+            if (!isDownload) {
+                await axios.put(`${SUPABASE_URL}/${BUCKET}/${encodeURIComponent(fileName)}`, pdfBuffer, {
+                    headers: { 'Authorization': `Bearer ${SERVICE_ROLE_KEY}`, 'Content-Type': 'application/pdf' }
+                });
+            }
 
             return new Response(pdfBuffer, {
                 status: 200,
-                headers: { 'Content-Type': 'application/pdf', 'X-File-Name': filePath }
+                headers: { 'Content-Type': 'application/pdf', 'X-File-Name': fileName }
             });
 
         } catch (error) {
+            //log error for debugging
+            console.error("Resume Generation Error:", error);
             return new Response(`Error: ${error.message}`, { status: 500 });
         } finally {
             try { fs.unlinkSync(inputPath); fs.unlinkSync(outputPath); } catch (e) { }
         }
     }
-});
-
-app.http("cusres", {
-    methods: ["POST"],
-    authLevel: "anonymous",
-    handler: async (req) => {
-        const runId = Math.random().toString(36).substring(7);
-        const inputPath = path.join(os.tmpdir(), `${runId}.tex`);
-        const outputPath = path.join(os.tmpdir(), `${runId}.pdf`);
-
-        try {
-            const reqBody = await req.json();
-            if (!reqBody || !reqBody.role) {
-                return new Response("Missing slug", { status: 400 });
-            }
-
-            // slug is the ONLY identifier
-            const slug = reqBody.role;
-
-            const texString = renderResume(reqBody);
-            const executable = await setupTectonic();
-
-            fs.writeFileSync(inputPath, texString);
-            await execFilePromise(executable, [inputPath, "--outdir", os.tmpdir()]);
-
-            if (!fs.existsSync(outputPath)) {
-                throw new Error("PDF output missing");
-            }
-
-            const pdfBuffer = fs.readFileSync(outputPath);
-
-            // ✅ canonical filename
-            const filePath = `${slug}.pdf`;
-
-            // ✅ upload to Supabase Storage
-            await axios.put(
-                `${SUPABASE_URL}/${BUCKET}/${encodeURIComponent(filePath)}`,
-                pdfBuffer,
-                {
-                    headers: {
-                        Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
-                        "Content-Type": "application/pdf",
-                    },
-                }
-            );
-
-            return new Response(pdfBuffer, {
-                status: 200,
-                headers: {
-                    "Content-Type": "application/pdf",
-                    "X-File-Name": filePath,
-                },
-            });
-        } catch (error) {
-            return new Response(`Error: ${error.message}`, { status: 500 });
-        } finally {
-            try {
-                fs.unlinkSync(inputPath);
-                fs.unlinkSync(outputPath);
-            } catch { }
-        }
-    },
-});
-
-app.http("cusresd", {
-    methods: ["POST"],
-    authLevel: "anonymous",
-    handler: async (req) => {
-        const runId = Math.random().toString(36).substring(7);
-        const inputPath = path.join(os.tmpdir(), `${runId}.tex`);
-        const outputPath = path.join(os.tmpdir(), `${runId}.pdf`);
-
-        try {
-            const reqBody = await req.json();
-            if (!reqBody || !reqBody.role) {
-                return new Response("Missing slug", { status: 400 });
-            }
-
-            // slug is the ONLY identifier
-            const slug = reqBody.role;
-
-            const texString = renderResume(reqBody);
-            const executable = await setupTectonic();
-
-            fs.writeFileSync(inputPath, texString);
-            await execFilePromise(executable, [inputPath, "--outdir", os.tmpdir()]);
-
-            if (!fs.existsSync(outputPath)) {
-                throw new Error("PDF output missing");
-            }
-
-            const pdfBuffer = fs.readFileSync(outputPath);
-
-            // ✅ canonical filename
-            const filePath = `${slug}.pdf`;
-
-            return new Response(pdfBuffer, {
-                status: 200,
-                headers: {
-                    "Content-Type": "application/pdf",
-                    "X-File-Name": filePath,
-                },
-            });
-        } catch (error) {
-            return new Response(`Error: ${error.message}`, { status: 500 });
-        } finally {
-            try {
-                fs.unlinkSync(inputPath);
-                fs.unlinkSync(outputPath);
-            } catch { }
-        }
-    },
 });
 
 // 2. TEX DEBUGGER

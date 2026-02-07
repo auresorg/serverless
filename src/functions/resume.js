@@ -24,8 +24,70 @@ const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const ESCAPE_MAP = { '\\': '\\textbackslash', '&': '\\&', '%': '\\%', '$': '\\$', '#': '\\#', '_': '\\_', '{': '\\{', '}': '\\}', '~': '\\textasciitilde', '^': '\\textasciicircum' };
 const safe = (v) => v == null ? "" : String(v).replace(/[\\&%$#_{}~^]/g, m => ESCAPE_MAP[m]);
 
+const normalizeCa = () => {
+    const raw = process.env.POSTGRES_CA || "";
+    let candidate = raw;
+
+    if (candidate.startsWith('"') && candidate.endsWith('"')) {
+        candidate = candidate.slice(1, -1);
+    }
+
+    candidate = candidate.replace(/\\r/g, "").replace(/\\n/g, "\n").trim();
+
+    const begin = '-----BEGIN CERTIFICATE-----';
+    const end = '-----END CERTIFICATE-----';
+
+    if (candidate.includes(begin) && candidate.includes(end)) {
+        const parts = candidate.split(begin);
+        if (parts.length > 1) {
+            const inner = parts[1].split(end)[0];
+            const base64Body = inner.replace(/\s+/g, '');
+            if (base64Body) {
+                const chunked = [];
+                for (let i = 0; i < base64Body.length; i += 64) {
+                    chunked.push(base64Body.slice(i, i + 64));
+                }
+                candidate = `${begin}\n${chunked.join('\n')}\n${end}`;
+            }
+        }
+    }
+
+    if (!candidate.includes(begin)) {
+        try {
+            const decoded = Buffer.from(candidate, 'base64').toString('utf8');
+            if (decoded.includes(begin)) {
+                candidate = decoded;
+            }
+        } catch { }
+    }
+
+    return candidate || undefined;
+};
+
+
 async function fetchFreshData(params) {
-    const client = new Client({ connectionString: process.env.DATABASE_URL });
+    const dbUrl = process.env.DATABASE_URL;
+
+    const urlPattern = /postgres:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/([^?]+)(\?sslmode=require)?/;
+    const match = dbUrl.match(urlPattern);
+
+    const [_, user, password, host, port, database] = match || [];
+    if (!user || !password || !host || !port || !database) {
+        throw new Error("Invalid POSTGRES_URL format");
+    }
+
+    const client = new Client({
+        host: host,
+        port: port,
+        user: user,
+        password: password,
+        database: database,
+        ssl: {
+            rejectUnauthorized: true,
+            ca: normalizeCa(),
+        },
+    });
+
     await client.connect();
     try {
         const { type, userId, role, slug } = params;

@@ -295,17 +295,14 @@ app.http('resume', {
                     ? `${username}-${role}.pdf`
                     : `${slug}.pdf`;
 
-            if (!isDownload) {
-                await axios.put(
-                    `${SUPABASE_URL}/${BUCKET}/${encodeURIComponent(fileName)}`,
-                    pdfBuffer,
-                    {
-                        headers: {
-                            Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
-                            'Content-Type': 'application/pdf'
-                        }
+            if (isDownload) {
+                return new Response(pdfBuffer, {
+                    status: 200,
+                    headers: {
+                        'Content-Type': 'application/pdf',
+                        'X-File-Name': fileName
                     }
-                );
+                });
             }
 
             if (type === 'standard') {
@@ -330,13 +327,18 @@ app.http('resume', {
                 );
             }
 
-            return new Response(pdfBuffer, {
-                status: 200,
-                headers: {
-                    'Content-Type': 'application/pdf',
-                    'X-File-Name': fileName
+            await axios.put(
+                `${SUPABASE_URL}/${BUCKET}/${encodeURIComponent(fileName)}`,
+                pdfBuffer,
+                {
+                    headers: {
+                        Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+                        'Content-Type': 'application/pdf'
+                    }
                 }
-            });
+            );
+
+            return new Response(null, { status: 200 });
         } catch (err) {
             console.error(err);
             return new Response(`Error: ${err.message}`, { status: 500 });

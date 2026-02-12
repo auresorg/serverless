@@ -163,8 +163,8 @@ const renderResume = (data) => {
                     items.push(String.raw`\href{${safeGet(data, 'leetcode')}}{\underline{${url.hostname + url.pathname}}}`);
                 } catch { }
             }
-            if (safeGet(data, 'phone')) {
-                items.push(safeGet(data, 'phone'));
+            if (safeGet(data, 'phonenumber')) {
+                items.push(safeGet(data, 'phonenumber'));
             }
             return items.slice(0, 4).map(item => item.trim()).join(' $|$ ');
         })()

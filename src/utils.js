@@ -58,6 +58,13 @@ const renderResume = (data) => {
         return typeof value === 'string' ? escapeLatex(value) : value;
     };
 
+    const formatDateRange = (start, end) => {
+        if (!start) return '';
+        const startFormatted = formatDate(start);
+        if (!end) return `${startFormatted} -- Present`;
+        return `${startFormatted} -- ${formatDate(end)}`;
+    };
+
     let TEMPLATE = String.raw`
         \documentclass[letterpaper,11pt]{article}
 
@@ -95,7 +102,6 @@ const renderResume = (data) => {
         \titleformat{\section}{
         \vspace{-4pt}\scshape\raggedright\large
         }{}{0em}{}[\color{black}\titlerule \vspace{-5pt}]
-
 
         \newcommand{\resumeItem}[1]{
         \item\small{
@@ -177,9 +183,9 @@ const renderResume = (data) => {
         \section{Education}
         \resumeSubHeadingListStart
             \resumeSubheading
-            {${safeGet(data, 'education.name')}}{${safeGet(data, 'education.location')}}
-            {${safeGet(data, 'education.degree')} ${safeGet(data, 'education.course')}}
-            {${formatDate(safeGet(data, 'education.from'))} -- ${safeGet(data, 'education.to') ? formatDate(safeGet(data, 'education.to')) : 'Present'}} 
+            {${safeGet(data, 'education.name')}}{${safeGet(data, 'education.location') || ''}}
+            {${safeGet(data, 'education.degree')} ${safeGet(data, 'education.course') || ''}}
+            {${safeGet(data, 'education.from') ? formatDate(safeGet(data, 'education.from')) + (safeGet(data, 'education.to') ? ' -- ' + formatDate(safeGet(data, 'education.to')) : ' -- Present') : ''}} 
         `;
 
         if (safeGet(data, 'education.score') && safeGet(data, 'education.maxscore')) {
@@ -204,14 +210,15 @@ const renderResume = (data) => {
         for (const course of data.courses) {
             TEMPLATE += String.raw`
                 \resumeSubheading
-                    {${course.title}}{${formatDate(course.started_at)} -- ${course.completed_at ? formatDate(course.completed_at) : 'Present'}}
-                    {${course.provider}}{}
+                    {${course.title || ''}}{${formatDateRange(course.started_at, course.completed_at)}}
+                    {${course.provider || ''}}{}
                 `;
 
             if (course.highlights && course.highlights.length > 0) {
                 TEMPLATE += String.raw`
                 \resumeItemListStart
                     ${course.highlights
+                        .filter(h => h && h.trim())
                         .map((highlight) => String.raw`\resumeItem{${highlight}}`)
                         .join("")}
                 \resumeItemListEnd`;
@@ -233,14 +240,14 @@ const renderResume = (data) => {
             if (project.title) {
                 TEMPLATE += String.raw`
                 \resumeProjectHeading
-                    {\truncate{0.97\textwidth}{\textbf{${project.url ? String.raw`\href{${project.url}}{${project.title}}` : project.title}} $|$ \emph{${project.skills.join(', ')}}}}{}
+                    {\truncate{0.97\textwidth}{\textbf{${project.url ? String.raw`\href{${project.url}}{${project.title}}` : project.title}} $|$ \emph{${project.skills ? project.skills.filter(s => s && s.trim()).join(', ') : ''}}}}{}
                 `;
 
                 if (project.highlights && project.highlights.length > 0) {
                     TEMPLATE += String.raw`
                     \resumeItemListStart
                         ${project.highlights
-                            .filter(highlight => highlight)
+                            .filter(highlight => highlight && highlight.trim())
                             .map((highlight) => String.raw`\resumeItem{${highlight}}`)
                             .join("")}
                     \resumeItemListEnd
@@ -265,14 +272,15 @@ const renderResume = (data) => {
 
             TEMPLATE += String.raw`
             \resumeSubheading
-                {${award.title}}{${formatDate(award.date)}}
-                {${award.issuer} \textnormal{\textit{-- ${award.type}}}}{}
+                {${award.title}}{${award.date ? formatDate(award.date) : ''}}
+                {${award.issuer || ''} ${award.type ? String.raw`\textnormal{\textit{-- ${award.type}}}` : ''}}{}
             `;
 
             if (award.highlights && award.highlights.length > 0) {
                 TEMPLATE += String.raw`
                 \resumeItemListStart
                     ${award.highlights
+                        .filter(h => h && h.trim())
                         .map((highlight) => String.raw`\resumeItem{${highlight}}`)
                         .join("")}
                 \resumeItemListEnd
@@ -294,14 +302,15 @@ const renderResume = (data) => {
         for (const exp of data.experiences) {
             TEMPLATE += String.raw`
             \resumeSubheading
-                {${exp.title}}{${formatDate(exp.from_date)} -- ${exp.to_date ? formatDate(exp.to_date) : 'Present'}}
-                {${exp.company}}{${exp.location}}
+                {${exp.title || ''}}{${formatDateRange(exp.from_date, exp.to_date)}}
+                {${exp.company || ''}}{${exp.location || ''}}
             `;
 
             if (exp.highlights && exp.highlights.length > 0) {
                 TEMPLATE += String.raw`
                 \resumeItemListStart
                     ${exp.highlights
+                        .filter(h => h && h.trim())
                         .map((highlight) => String.raw`\resumeItem{${highlight}}`)
                         .join("")}
                 \resumeItemListEnd

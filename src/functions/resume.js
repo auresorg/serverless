@@ -41,7 +41,7 @@ function safe(v) {
 
     // 1. Remove ##marker## but KEEP inner text
     // Works anywhere in the string
-    s = s.replace(/##(.*?)##/g, '$1');
+    s = s.replace(/##.*?##/g, '');
 
     // 2. Escape LaTeX special characters
     s = s.replace(/[\\&%$#_{}~^]/g, ch => ESCAPE_MAP[ch]);

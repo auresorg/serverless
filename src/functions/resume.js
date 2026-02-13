@@ -183,7 +183,7 @@ async function fetchFreshData(client, params) {
         linkedin: safe(userRow.linkedin),
         portfolio: safe(userRow.portfolio),
         leetcode: safe(userRow.leetcode),
-        phonenumber: safe(userRow.phoneNumber),
+        phonenumber: safe(userRow.phonenumber),
 
         education: data.edu
             ? {

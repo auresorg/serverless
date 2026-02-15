@@ -186,7 +186,6 @@ const renderResume = (data) => {
 
                 return items.slice(0, 5).join(' $|$ ');
             })()}
-        }
         \end{center}
     `;
 

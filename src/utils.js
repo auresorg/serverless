@@ -147,33 +147,45 @@ const renderResume = (data) => {
             \textbf{\Huge \scshape ${safeGet(data, 'name')}} \\ \vspace{1pt}
             \small
             ${(() => {
-            const items = [];
-            if (safeGet(data, 'portfolio')) {
-                items.push(String.raw`\href{${safeGet(data, 'portfolio')}}{\underline{${safeGet(data, 'portfolio').replace(/^https?:\/\//, '')}}}`);
-            }
-            if (safeGet(data, 'email')) {
-                items.push(String.raw`\href{mailto:${safeGet(data, 'email')}}{\underline{${safeGet(data, 'email')}}}`);
-            }
-            if (safeGet(data, 'linkedin')) {
-                try {
-                    const url = new URL(safeGet(data, 'linkedin'));
-                    items.push(String.raw`\href{${safeGet(data, 'linkedin')}}{\underline{${url.hostname + url.pathname}}}`);
-                } catch { }
-            }
-            if (safeGet(data, 'github')) {
-                items.push(String.raw`\href{https://github.com/${safeGet(data, 'github')}}{\underline{github.com/${safeGet(data, 'github')}}}`);
-            }
-            if (safeGet(data, 'leetcode')) {
-                try {
-                    const url = new URL(safeGet(data, 'leetcode'));
-                    items.push(String.raw`\href{${safeGet(data, 'leetcode')}}{\underline{${url.hostname + url.pathname}}}`);
-                } catch { }
-            }
-            if (safeGet(data, 'phonenumber')) {
-                items.push(safeGet(data, 'phonenumber'));
-            }
-            return items.slice(0, 4).map(item => item.trim()).join(' $|$ ');
-        })()
+                const items = [];
+
+                // 1. Portfolio
+                if (safeGet(data, 'portfolio')) {
+                    items.push(
+                        String.raw`\href{${safeGet(data, 'portfolio')}}{\underline{Portfolio}}`
+                    );
+                }
+
+                // 2. LinkedIn
+                if (safeGet(data, 'linkedin')) {
+                    items.push(
+                        String.raw`\href{${safeGet(data, 'linkedin')}}{\underline{LinkedIn}}`
+                    );
+                }
+
+                // 3. Github
+                if (safeGet(data, 'github')) {
+                    items.push(
+                        String.raw`\href{https://github.com/${safeGet(data, 'github')}}{\underline{Github}}`
+                    );
+                }
+
+                // 4. Phone (clickable tel link)
+                if (safeGet(data, 'phonenumber')) {
+                    items.push(
+                        String.raw`\href{tel:${safeGet(data, 'phonenumber')}}{\underline{${safeGet(data, 'phonenumber')}}}`
+                    );
+                }
+
+                // 5. Email
+                if (safeGet(data, 'email')) {
+                    items.push(
+                        String.raw`\href{mailto:${safeGet(data, 'email')}}{\underline{${safeGet(data, 'email')}}}`
+                    );
+                }
+
+                return items.slice(0, 5).join(' $|$ ');
+            })()}
         }
         \end{center}
     `;

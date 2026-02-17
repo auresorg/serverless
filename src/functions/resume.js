@@ -5,7 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const util = require('util');
 const axios = require('axios');
-const { renderResume, setupTectonic } = require("../utils");
+const { renderResume, setupTectonic, log, critical } = require("../utils");
 const { Client } = require('pg');
 const { createClient } = require('@vercel/kv');
 
@@ -234,6 +234,7 @@ app.http('resume', {
     methods: ['POST'],
     authLevel: 'anonymous',
     handler: async (req) => {
+        log("Received resume generation request");
         const requestId = Math.random().toString(36).substring(7);
         const inputPath = path.join(os.tmpdir(), `${requestId}.tex`);
         const outputPath = path.join(os.tmpdir(), `${requestId}.pdf`);
@@ -265,14 +266,13 @@ app.http('resume', {
             const body = await req.json();
             const { type, role, slug, username, mode } = body;
             const isDownload = mode === 'download';
-
+            log(`Processing ${body}`);
             await client.connect();
 
             const payload = await fetchFreshData(client, body);
             if (!payload) {
                 return new Response("Not found", { status: 404 });
             }
-
             const counts = {
                 projects: payload.projects.length,
                 certificates: payload.courses.length,
@@ -341,7 +341,7 @@ app.http('resume', {
 
             return new Response(null, { status: 200 });
         } catch (err) {
-            console.error(err);
+            critical("Resume generation error: " + err.message);
             return new Response(`Error: ${err.message}`, { status: 500 });
         } finally {
             await client.end();

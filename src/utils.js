@@ -4,7 +4,6 @@ const os = require('os');
 const axios = require('axios');
 const { JAKES_RESUME } = require('./templates');
 
-const TG_TOKEN = process.env.TG_TOKEN;
 const TG_CHAT_ID = process.env.TG_CHAT_ID;
 
 const getDaySuffix = (day) => {
@@ -71,15 +70,23 @@ const renderResume = (data) => {
     return TEMPLATE;
 };
 
-async function sendTelegram(msg) {
+async function sendTelegram(msg, token) {
     try {
-        await axios.post(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+        await axios.post(`https://api.telegram.org/bot${token}/sendMessage`, {
             chat_id: TG_CHAT_ID,
             text: msg
         });
     } catch (e) {
         console.error("Telegram Error:", e.message);
     }
+}
+
+async function critical(msg) {
+    await sendTelegram("SERVERLESS - [CRITICAL] " + msg, process.env.CRITICAL_TG);
+}
+
+async function log(msg) {
+    await sendTelegram("SERVERLESS - [LOG] " + msg, process.env.LOG_TG);
 }
 
 async function setupTectonic() {
@@ -96,17 +103,17 @@ async function setupTectonic() {
 
     try {
         if (!fs.existsSync(bundledBinary)) {
-            await sendTelegram("[CRITICAL] 'tectonic' binary not found in deployment folder!");
+            await critical("'tectonic' binary not found in deployment folder!");
             throw new Error("Tectonic binary missing from bundle");
         }
 
         fs.copyFileSync(bundledBinary, tempBinary);
         fs.chmodSync(tempBinary, '755');
     } catch (error) {
-        await sendTelegram("[SETUP ERROR] " + error.message);
+        await critical("[SETUP ERROR] " + error.message);
         throw error;
     }
-    sendTelegram("Executed tectonic setup");
+    log("Tectonic setup complete, binary ready at: " + tempBinary);
     return tempBinary;
 }
 
@@ -114,6 +121,7 @@ module.exports = {
     getDaySuffix,
     formatDate,
     renderResume,
-    sendTelegram,
-    setupTectonic
+    setupTectonic,
+    critical,
+    log
 };

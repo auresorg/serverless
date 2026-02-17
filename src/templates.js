@@ -147,12 +147,19 @@ const JAKES_RESUME = (data, safeGet, formatDate, formatDateRange) => {
     }
 
     if (safeGet(data, 'courses') && data.courses.length > 0) {
+        // Sort courses by completed_at date (most recent first)
+        const sortedCourses = [...data.courses].sort((a, b) => {
+            const dateA = a.completed_at ? new Date(a.completed_at) : new Date(0);
+            const dateB = b.completed_at ? new Date(b.completed_at) : new Date(0);
+            return dateB - dateA;
+        });
+
         TEMPLATE += String.raw`
         \section{Certifications}
         \resumeSubHeadingListStart
         `;
 
-        for (const course of data.courses) {
+        for (const course of sortedCourses) {
             TEMPLATE += String.raw`
                 \resumeSubheading
                     {${course.title || ''}}{${formatDateRange(course.started_at, course.completed_at)}}
@@ -176,16 +183,26 @@ const JAKES_RESUME = (data, safeGet, formatDate, formatDateRange) => {
     }
 
     if (safeGet(data, 'projects') && data.projects.length > 0) {
+        // Sort projects by date if available
+        const sortedProjects = [...data.projects].sort((a, b) => {
+            if (a.date && b.date) {
+                return new Date(b.date) - new Date(a.date);
+            }
+            if (a.date && !b.date) return -1;
+            if (!a.date && b.date) return 1;
+            return 0;
+        });
+
         TEMPLATE += String.raw`
         \section{Projects}
             \resumeSubHeadingListStart
         `;
 
-        for (const project of data.projects) {
+        for (const project of sortedProjects) {
             if (project.title) {
                 TEMPLATE += String.raw`
                 \resumeProjectHeading
-                    {\truncate{0.97\textwidth}{\textbf{${project.url ? String.raw`\href{${project.url}}{${project.title}}` : project.title}} $|$ \emph{${project.skills ? project.skills.filter(s => s && s.trim()).join(', ') : ''}}}}{}
+                    {\truncate{0.97\textwidth}{\textbf{${project.url ? String.raw`\href{${project.url}}{${project.title}}` : project.title}} $|$ \emph{${project.skills ? project.skills.filter(s => s && s.trim()).join(', ') : ''}}}}{${project.date ? formatDate(project.date) : ''}}
                 `;
 
                 if (project.highlights && project.highlights.length > 0) {
@@ -207,12 +224,19 @@ const JAKES_RESUME = (data, safeGet, formatDate, formatDateRange) => {
     }
 
     if (safeGet(data, 'awards') && data.awards.length > 0) {
+        // Sort awards by date (most recent first)
+        const sortedAwards = [...data.awards].sort((a, b) => {
+            const dateA = a.date ? new Date(a.date) : new Date(0);
+            const dateB = b.date ? new Date(b.date) : new Date(0);
+            return dateB - dateA;
+        });
+
         TEMPLATE += String.raw`
         \section{Awards}
         \resumeSubHeadingListStart
         `;
 
-        for (const award of data.awards) {
+        for (const award of sortedAwards) {
             if (!award.title) continue;
 
             TEMPLATE += String.raw`
@@ -239,12 +263,19 @@ const JAKES_RESUME = (data, safeGet, formatDate, formatDateRange) => {
     }
 
     if (safeGet(data, 'experiences') && data.experiences.length > 0) {
+        // Sort experiences by date (most recent first)
+        const sortedExperiences = [...data.experiences].sort((a, b) => {
+            const dateA = a.to_date ? new Date(a.to_date) : (a.from_date ? new Date(a.from_date) : new Date(0));
+            const dateB = b.to_date ? new Date(b.to_date) : (b.from_date ? new Date(b.from_date) : new Date(0));
+            return dateB - dateA;
+        });
+
         TEMPLATE += String.raw`
         \section{Experience}
         \resumeSubHeadingListStart
         `;
 
-        for (const exp of data.experiences) {
+        for (const exp of sortedExperiences) {
             TEMPLATE += String.raw`
             \resumeSubheading
                 {${exp.title || ''}}{${formatDateRange(exp.from_date, exp.to_date)}}

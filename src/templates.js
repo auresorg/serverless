@@ -146,34 +146,34 @@ const JAKES_RESUME = (data, safeGet, formatDate, formatDateRange) => {
         `;
     }
 
-    if (safeGet(data, 'courses') && data.courses.length > 0) {
-        // Sort courses by completed_at date (most recent first)
-        const sortedCourses = [...data.courses].sort((a, b) => {
-            const dateA = a.completed_at ? new Date(a.completed_at) : new Date(0);
-            const dateB = b.completed_at ? new Date(b.completed_at) : new Date(0);
+    if (safeGet(data, 'experiences') && data.experiences.length > 0) {
+        const sortedExperiences = [...data.experiences].sort((a, b) => {
+            const dateA = a.to_date ? new Date(a.to_date) : (a.from_date ? new Date(a.from_date) : new Date(0));
+            const dateB = b.to_date ? new Date(b.to_date) : (b.from_date ? new Date(b.from_date) : new Date(0));
             return dateB - dateA;
         });
 
         TEMPLATE += String.raw`
-        \section{Certifications}
+        \section{Experience}
         \resumeSubHeadingListStart
         `;
 
-        for (const course of sortedCourses) {
+        for (const exp of sortedExperiences) {
             TEMPLATE += String.raw`
-                \resumeSubheading
-                    {${course.title || ''}}{${formatDateRange(course.started_at, course.completed_at)}}
-                    {${course.provider || ''}}{}
-                `;
+            \resumeSubheading
+                {${exp.title || ''}}{${formatDateRange(exp.from_date, exp.to_date)}}
+                {${exp.company || ''}}{${exp.location || ''}}
+            `;
 
-            if (course.highlights && course.highlights.length > 0) {
+            if (exp.highlights && exp.highlights.length > 0) {
                 TEMPLATE += String.raw`
                 \resumeItemListStart
-                    ${course.highlights
+                    ${exp.highlights
                         .filter(h => h && h.trim())
                         .map((highlight) => String.raw`\resumeItem{${highlight}}`)
                         .join("")}
-                \resumeItemListEnd`;
+                \resumeItemListEnd
+                `;
             }
         }
 
@@ -183,7 +183,6 @@ const JAKES_RESUME = (data, safeGet, formatDate, formatDateRange) => {
     }
 
     if (safeGet(data, 'projects') && data.projects.length > 0) {
-        // Sort projects by date if available
         const sortedProjects = [...data.projects].sort((a, b) => {
             if (a.date && b.date) {
                 return new Date(b.date) - new Date(a.date);
@@ -223,8 +222,42 @@ const JAKES_RESUME = (data, safeGet, formatDate, formatDateRange) => {
         `;
     }
 
+    if (safeGet(data, 'courses') && data.courses.length > 0) {
+        const sortedCourses = [...data.courses].sort((a, b) => {
+            const dateA = a.completed_at ? new Date(a.completed_at) : new Date(0);
+            const dateB = b.completed_at ? new Date(b.completed_at) : new Date(0);
+            return dateB - dateA;
+        });
+
+        TEMPLATE += String.raw`
+        \section{Certifications}
+        \resumeSubHeadingListStart
+        `;
+
+        for (const course of sortedCourses) {
+            TEMPLATE += String.raw`
+                \resumeSubheading
+                    {${course.title || ''}}{${formatDateRange(course.started_at, course.completed_at)}}
+                    {${course.provider || ''}}{}
+                `;
+
+            if (course.highlights && course.highlights.length > 0) {
+                TEMPLATE += String.raw`
+                \resumeItemListStart
+                    ${course.highlights
+                        .filter(h => h && h.trim())
+                        .map((highlight) => String.raw`\resumeItem{${highlight}}`)
+                        .join("")}
+                \resumeItemListEnd`;
+            }
+        }
+
+        TEMPLATE += String.raw`
+        \resumeSubHeadingListEnd
+        `;
+    }
+
     if (safeGet(data, 'awards') && data.awards.length > 0) {
-        // Sort awards by date (most recent first)
         const sortedAwards = [...data.awards].sort((a, b) => {
             const dateA = a.date ? new Date(a.date) : new Date(0);
             const dateB = b.date ? new Date(b.date) : new Date(0);
@@ -262,42 +295,8 @@ const JAKES_RESUME = (data, safeGet, formatDate, formatDateRange) => {
         `;
     }
 
-    if (safeGet(data, 'experiences') && data.experiences.length > 0) {
-        // Sort experiences by date (most recent first)
-        const sortedExperiences = [...data.experiences].sort((a, b) => {
-            const dateA = a.to_date ? new Date(a.to_date) : (a.from_date ? new Date(a.from_date) : new Date(0));
-            const dateB = b.to_date ? new Date(b.to_date) : (b.from_date ? new Date(b.from_date) : new Date(0));
-            return dateB - dateA;
-        });
-
-        TEMPLATE += String.raw`
-        \section{Experience}
-        \resumeSubHeadingListStart
-        `;
-
-        for (const exp of sortedExperiences) {
-            TEMPLATE += String.raw`
-            \resumeSubheading
-                {${exp.title || ''}}{${formatDateRange(exp.from_date, exp.to_date)}}
-                {${exp.company || ''}}{${exp.location || ''}}
-            `;
-
-            if (exp.highlights && exp.highlights.length > 0) {
-                TEMPLATE += String.raw`
-                \resumeItemListStart
-                    ${exp.highlights
-                        .filter(h => h && h.trim())
-                        .map((highlight) => String.raw`\resumeItem{${highlight}}`)
-                        .join("")}
-                \resumeItemListEnd
-                `;
-            }
-        }
-
-        TEMPLATE += String.raw`
-        \resumeSubHeadingListEnd
-        `;
-    }
+    // Skills section (sixth) - Note: There is no skills section in the original code
+    // This would need to be added separately if you want a skills section
 
     TEMPLATE += String.raw`
     \end{document}

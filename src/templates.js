@@ -1,4 +1,36 @@
 const JAKES_RESUME = (data, safeGet, formatDate, formatDateRange) => {
+
+    const skillsData = require('./skills.json');
+
+    const allSkills = new Set();
+
+    if (safeGet(data, 'projects') && data.projects.length > 0) {
+        console.log("Processing projects to extract skills...");
+        console.log("Projects data:", data.projects);
+        for (const project of data.projects) {
+            console.log(`Processing project: ${project.title}, tech: ${project.skills}`);
+            if (project.skills && Array.isArray(project.skills)) {
+                console.log(`Processing project: ${project.title}, skills: ${project.skills}`);
+                project.skills.forEach(skill => {
+                    if (skill && skill.trim()) {
+                        allSkills.add(skill.trim());
+                    }
+                });
+            }
+        }
+    }
+
+    // Define categories from skills.json
+    const skillCategories = {
+        "Languages": skillsData.Languages || [],
+        "Databases": skillsData.Databases || [],
+        "Platforms": skillsData.Platforms || [],
+        "Frameworks": skillsData.Frameworks || [],
+        "Tools": skillsData.Tools || [],
+        "Operating Systems": skillsData["Operating Systems"] || [],
+        "Others": []
+    };
+
     let TEMPLATE = String.raw`
         \documentclass[letterpaper,11pt]{article}
 
@@ -81,45 +113,45 @@ const JAKES_RESUME = (data, safeGet, formatDate, formatDateRange) => {
             \textbf{\Huge \scshape ${safeGet(data, 'name')}} \\ \vspace{1pt}
             \small
             ${(() => {
-                const items = [];
+            const items = [];
 
-                // 1. Portfolio
-                if (safeGet(data, 'portfolio')) {
-                    items.push(
-                        String.raw`\href{${safeGet(data, 'portfolio')}}{\underline{Portfolio}}`
-                    );
-                }
+            // 1. Portfolio
+            if (safeGet(data, 'portfolio')) {
+                items.push(
+                    String.raw`\href{${safeGet(data, 'portfolio')}}{\underline{Portfolio}}`
+                );
+            }
 
-                // 2. LinkedIn
-                if (safeGet(data, 'linkedin')) {
-                    items.push(
-                        String.raw`\href{${safeGet(data, 'linkedin')}}{\underline{LinkedIn}}`
-                    );
-                }
+            // 2. LinkedIn
+            if (safeGet(data, 'linkedin')) {
+                items.push(
+                    String.raw`\href{${safeGet(data, 'linkedin')}}{\underline{LinkedIn}}`
+                );
+            }
 
-                // 3. Github
-                if (safeGet(data, 'github')) {
-                    items.push(
-                        String.raw`\href{https://github.com/${safeGet(data, 'github')}}{\underline{Github}}`
-                    );
-                }
+            // 3. Github
+            if (safeGet(data, 'github')) {
+                items.push(
+                    String.raw`\href{https://github.com/${safeGet(data, 'github')}}{\underline{Github}}`
+                );
+            }
 
-                // 4. Phone (clickable tel link)
-                if (safeGet(data, 'phonenumber')) {
-                    items.push(
-                        String.raw`\href{tel:${safeGet(data, 'phonenumber')}}{\underline{${safeGet(data, 'phonenumber')}}}`
-                    );
-                }
+            // 4. Phone (clickable tel link)
+            if (safeGet(data, 'phonenumber')) {
+                items.push(
+                    String.raw`\href{tel:${safeGet(data, 'phonenumber')}}{\underline{${safeGet(data, 'phonenumber')}}}`
+                );
+            }
 
-                // 5. Email
-                if (safeGet(data, 'email')) {
-                    items.push(
-                        String.raw`\href{mailto:${safeGet(data, 'email')}}{\underline{${safeGet(data, 'email')}}}`
-                    );
-                }
+            // 5. Email
+            if (safeGet(data, 'email')) {
+                items.push(
+                    String.raw`\href{mailto:${safeGet(data, 'email')}}{\underline{${safeGet(data, 'email')}}}`
+                );
+            }
 
-                return items.slice(0, 5).join(' $|$ ');
-            })()}
+            return items.slice(0, 5).join(' $|$ ');
+        })()}
         \end{center}
     `;
 
@@ -295,8 +327,85 @@ const JAKES_RESUME = (data, safeGet, formatDate, formatDateRange) => {
         `;
     }
 
-    // Skills section (sixth) - Note: There is no skills section in the original code
-    // This would need to be added separately if you want a skills section
+    // ============ SKILLS SECTION ============
+    console.log("All skills collected from projects:", Array.from(allSkills));
+    if (allSkills.size > 0) {
+        // Object to store categorized skills
+        const categorized = {
+            "Languages": [],
+            "Databases": [],
+            "Platforms": [],
+            "Frameworks": [],
+            "Tools": [],
+            "Operating Systems": [],
+            "Others": []
+        };
+
+        // Categorize each skill
+        allSkills.forEach(skill => {
+            const skillLower = skill.toLowerCase();
+            let matched = false;
+
+            // Check each category
+            for (const category of ["Languages", "Databases", "Platforms", "Frameworks", "Tools", "Operating Systems"]) {
+                if (skillCategories[category].some(item => item.toLowerCase() === skillLower)) {
+                    categorized[category].push(skill);
+                    matched = true;
+                    break;
+                }
+            }
+
+            if (!matched) {
+                categorized.Others.push(skill);
+            }
+        });
+
+        // Sort skills alphabetically
+        for (const category in categorized) {
+            categorized[category].sort();
+        }
+
+        // Build the LaTeX section
+        TEMPLATE += String.raw`
+        
+        \section{Technical Skills}
+            \begin{itemize}[leftmargin=0.15in, label={}]
+                \small{\item{
+        `;
+
+        // Add categories that have skills
+        const categoryEntries = [];
+
+        if (categorized.Languages.length > 0) {
+            categoryEntries.push(`\\textbf{Languages}{: ${categorized.Languages.join(', ')}}`);
+        }
+        if (categorized.Databases.length > 0) {
+            categoryEntries.push(`\\textbf{Databases}{: ${categorized.Databases.join(', ')}}`);
+        }
+        if (categorized.Platforms.length > 0) {
+            categoryEntries.push(`\\textbf{Platforms}{: ${categorized.Platforms.join(', ')}}`);
+        }
+        if (categorized.Frameworks.length > 0) {
+            categoryEntries.push(`\\textbf{Frameworks}{: ${categorized.Frameworks.join(', ')}}`);
+        }
+        if (categorized.Tools.length > 0) {
+            categoryEntries.push(`\\textbf{Tools}{: ${categorized.Tools.join(', ')}}`);
+        }
+        if (categorized["Operating Systems"].length > 0) {
+            categoryEntries.push(`\\textbf{Operating Systems}{: ${categorized["Operating Systems"].join(', ')}}`);
+        }
+        if (categorized.Others.length > 0) {
+            categoryEntries.push(`\\textbf{Others}{: ${categorized.Others.join(', ')}}`);
+        }
+
+        TEMPLATE += categoryEntries.join(` \\\\\n`);
+
+        TEMPLATE += String.raw`
+                }}
+            \end{itemize}
+        `;
+    }
+    // ============ END SKILLS SECTION ============
 
     TEMPLATE += String.raw`
     \end{document}

@@ -5,12 +5,8 @@ const JAKES_RESUME = (data, safeGet, formatDate, formatDateRange) => {
     const allSkills = new Set();
 
     if (safeGet(data, 'projects') && data.projects.length > 0) {
-        console.log("Processing projects to extract skills...");
-        console.log("Projects data:", data.projects);
         for (const project of data.projects) {
-            console.log(`Processing project: ${project.title}, tech: ${project.skills}`);
             if (project.skills && Array.isArray(project.skills)) {
-                console.log(`Processing project: ${project.title}, skills: ${project.skills}`);
                 project.skills.forEach(skill => {
                     if (skill && skill.trim()) {
                         allSkills.add(skill.trim());
@@ -328,7 +324,6 @@ const JAKES_RESUME = (data, safeGet, formatDate, formatDateRange) => {
     }
 
     // ============ SKILLS SECTION ============
-    console.log("All skills collected from projects:", Array.from(allSkills));
     if (allSkills.size > 0) {
         // Object to store categorized skills
         const categorized = {

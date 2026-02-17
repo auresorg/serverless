@@ -266,7 +266,7 @@ app.http('resume', {
             const body = await req.json();
             const { type, role, slug, username, mode } = body;
             const isDownload = mode === 'download';
-            log(`Processing ${body}`);
+            log("Processing", body);
             await client.connect();
 
             const payload = await fetchFreshData(client, body);

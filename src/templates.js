@@ -128,7 +128,7 @@ const JAKES_RESUME = (data, safeGet, formatDate, formatDateRange) => {
             // 3. Github
             if (safeGet(data, 'github')) {
                 items.push(
-                    String.raw`\href{https://github.com/${safeGet(data, 'github')}}{\underline{Github}}`
+                    String.raw`\href{https://github.com/${safeGet(data, 'github')}}{\underline{GitHub}}`
                 );
             }
 

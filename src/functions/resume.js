@@ -90,7 +90,16 @@ const normalizeCa = () => {
 };
 
 async function fetchFreshData(client, params) {
-    const { type, userId, role, slug } = params;
+    const {
+        type,
+        userId,
+        role,
+        slug,
+        projects = [],
+        certifications = [],
+        experiences = [],
+        awards = []
+    } = params;
 
     const userRes = await client.query(
         'SELECT * FROM users WHERE id = $1',
@@ -140,7 +149,27 @@ async function fetchFreshData(client, params) {
         );
 
         data = res.rows[0];
-    } else {
+    } else if (type === 'custom-direct') {
+        const res = await client.query(
+            `
+        SELECT
+            (SELECT row_to_json(e)
+             FROM (SELECT school, degree, field, start_date, end_date, grade
+                   FROM education
+                   WHERE user_id = $1
+                   LIMIT 1) e) AS edu,
+
+            (SELECT json_agg(p) FROM project p WHERE id = ANY($2::int[])) AS projects,
+            (SELECT json_agg(c) FROM certification c WHERE id = ANY($3::int[])) AS certs,
+            (SELECT json_agg(ex) FROM experience ex WHERE id = ANY($4::int[])) AS exps,
+            (SELECT json_agg(a) FROM award a WHERE id = ANY($5::int[])) AS awards
+        `,
+            [userId, projects, certifications, experiences, awards]
+        );
+
+        data = res.rows[0];
+    }
+    else {
         const cRes = await client.query(
             'SELECT * FROM cusres WHERE slug = $1',
             [slug]
@@ -353,25 +382,6 @@ app.http('resume', {
     }
 });
 
-// 2. TEX DEBUGGER
-app.http('tex', {
-    methods: ['POST'],
-    authLevel: 'anonymous',
-    handler: async (req) => {
-        try {
-            const reqBody = await req.json();
-            if (!reqBody) return new Response("No data", { status: 400 });
-
-            return new Response(renderResume(reqBody), {
-                status: 200,
-                headers: { 'Content-Type': 'text/plain', 'X-File-Name': `${reqBody.github || 'resume'}.tex` }
-            });
-        } catch (error) {
-            return new Response(`Error: ${error.message}`, { status: 500 });
-        }
-    }
-});
-
 app.http("custex", {
     methods: ["POST"],
     authLevel: "anonymous",
@@ -398,4 +408,99 @@ app.http("custex", {
             return new Response(`Error: ${error.message}`, { status: 500 });
         }
     },
+});
+
+app.http('resume-direct', {
+    methods: ['POST'],
+    authLevel: 'anonymous',
+    handler: async (req) => {
+        const requestId = Math.random().toString(36).substring(7);
+        const inputPath = path.join(os.tmpdir(), `${requestId}.tex`);
+        const outputPath = path.join(os.tmpdir(), `${requestId}.pdf`);
+
+        const dbUrl = process.env.DATABASE_URL;
+        const match = dbUrl.match(
+            /postgres:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/([^?]+)/
+        );
+
+        if (!match) {
+            return new Response("Invalid DATABASE_URL", { status: 500 });
+        }
+
+        const [, dbUser, dbPassword, host, port, database] = match;
+
+        const client = new Client({
+            host,
+            port,
+            user: dbUser,
+            password: dbPassword,
+            database,
+            ssl: {
+                rejectUnauthorized: true,
+                ca: normalizeCa()
+            }
+        });
+
+        try {
+            const body = await req.json();
+
+            const {
+                userId,
+                role,
+                projects = [],
+                certifications = [],
+                experiences = [],
+                awards = []
+            } = body;
+
+            if (!userId) {
+                return new Response("Missing userId", { status: 400 });
+            }
+
+            await client.connect();
+
+            const payload = await fetchFreshData(client, {
+                type: 'custom-direct',
+                userId,
+                role,
+                projects,
+                certifications,
+                experiences,
+                awards
+            });
+
+            if (!payload) {
+                return new Response("Not found", { status: 404 });
+            }
+
+            const texString = renderResume(payload);
+            const executable = await setupTectonic();
+
+            fs.writeFileSync(inputPath, texString);
+            await execFilePromise(executable, [inputPath, '--outdir', os.tmpdir()], { env: process.env });
+
+            if (!fs.existsSync(outputPath)) {
+                throw new Error("PDF generation failed");
+            }
+
+            const pdfBuffer = fs.readFileSync(outputPath);
+
+            return new Response(pdfBuffer, {
+                status: 200,
+                headers: {
+                    'Content-Type': 'application/pdf',
+                    'X-File-Name': `${role || 'resume'}.pdf`
+                }
+            });
+
+        } catch (err) {
+            return new Response(`Error: ${err.message}`, { status: 500 });
+        } finally {
+            await client.end();
+            try {
+                fs.unlinkSync(inputPath);
+                fs.unlinkSync(outputPath);
+            } catch { }
+        }
+    }
 });

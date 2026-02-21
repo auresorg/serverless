@@ -284,7 +284,7 @@ app.http('resume', {
             const executable = await setupTectonic();
 
             fs.writeFileSync(inputPath, texString);
-            await execFilePromise(executable, [inputPath, '--outdir', os.tmpdir()]);
+            await execFilePromise(executable, [inputPath, '--outdir', os.tmpdir()], { env: process.env });
 
             if (!fs.existsSync(outputPath)) {
                 throw new Error("PDF generation failed");

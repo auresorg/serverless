@@ -97,6 +97,14 @@ async function setupTectonic() {
     const bundledBinary = path.join(__dirname, 'tectonic');
     const tempBinary = path.join(os.tmpdir(), 'tectonic-ready');
 
+    //Force per-instance cache
+    const cacheDir = path.join(os.tmpdir(), 'tectonic-cache');
+    process.env.TECTONIC_CACHE_DIR = cacheDir;
+
+    if (!fs.existsSync(cacheDir)) {
+        fs.mkdirSync(cacheDir, { recursive: true });
+    }
+
     if (fs.existsSync(tempBinary)) {
         return tempBinary;
     }
@@ -113,6 +121,7 @@ async function setupTectonic() {
         await critical("[SETUP ERROR] " + error.message);
         throw error;
     }
+
     log("Tectonic setup complete, binary ready at: " + tempBinary);
     return tempBinary;
 }

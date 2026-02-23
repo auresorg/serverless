@@ -218,12 +218,9 @@ const JAKES_RESUME = (data, safeGet, formatDate, formatDateRange) => {
 
     if (safeGet(data, 'projects') && data.projects.length > 0) {
         const sortedProjects = [...data.projects].sort((a, b) => {
-            if (a.date && b.date) {
-                return new Date(b.date) - new Date(a.date);
-            }
-            if (a.date && !b.date) return -1;
-            if (!a.date && b.date) return 1;
-            return 0;
+            const dateA = a.to_date ? new Date(a.to_date) : (a.from_date ? new Date(a.from_date) : new Date(0));
+            const dateB = b.to_date ? new Date(b.to_date) : (b.from_date ? new Date(b.from_date) : new Date(0));
+            return dateB - dateA;
         });
 
         TEMPLATE += String.raw`
@@ -235,7 +232,7 @@ const JAKES_RESUME = (data, safeGet, formatDate, formatDateRange) => {
             if (project.title) {
                 TEMPLATE += String.raw`
                 \resumeProjectHeading
-                    {\truncate{0.97\textwidth}{\textbf{${project.url ? String.raw`\href{${project.url}}{${project.title}}` : project.title}} $|$ \emph{${project.skills ? project.skills.filter(s => s && s.trim()).join(', ') : ''}}}}{${project.date ? formatDate(project.date) : ''}}
+                    {\truncate{0.97\textwidth}{\textbf{${project.url ? String.raw`\href{${project.url}}{${project.title}}` : project.title}} $|$ \emph{${project.skills ? project.skills.filter(s => s && s.trim()).join(', ') : ''}}}}{${formatDateRange(project.from_date, project.to_date)}}
                 `;
 
                 if (project.highlights && project.highlights.length > 0) {

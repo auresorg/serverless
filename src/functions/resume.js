@@ -116,7 +116,7 @@ async function fetchFreshData(client, params) {
             `
             SELECT 
                 (SELECT row_to_json(e)
-                 FROM (SELECT school, degree, field, start_date, end_date, grade
+                 FROM (SELECT school, degree, field, start_date, end_date, grade, description
                        FROM education
                        WHERE user_id = $1
                        LIMIT 1) e) AS edu,
@@ -154,7 +154,7 @@ async function fetchFreshData(client, params) {
             `
         SELECT
             (SELECT row_to_json(e)
-             FROM (SELECT school, degree, field, start_date, end_date, grade
+             FROM (SELECT school, degree, field, start_date, end_date, grade, description
                    FROM education
                    WHERE user_id = $1
                    LIMIT 1) e) AS edu,
@@ -182,7 +182,7 @@ async function fetchFreshData(client, params) {
             `
             SELECT
                 (SELECT row_to_json(e)
-                 FROM (SELECT school, degree, field, start_date, end_date, grade
+                 FROM (SELECT school, degree, field, start_date, end_date, grade, description
                        FROM education
                        WHERE user_id = $1
                        LIMIT 1) e) AS edu,
@@ -221,7 +221,8 @@ async function fetchFreshData(client, params) {
                 course: safe(data.edu.field),
                 from: safe(data.edu.start_date),
                 to: safe(data.edu.end_date),
-                score: safe(data.edu.grade)
+                score: safe(data.edu.grade),
+                description: safe(data.edu.description)
             }
             : null,
 

@@ -232,7 +232,7 @@ const JAKES_RESUME = (data, safeGet, formatDate, formatDateRange) => {
             if (project.title) {
                 TEMPLATE += String.raw`
                 \resumeProjectHeading
-                    {\truncate{0.97\textwidth}{\textbf{${project.url ? String.raw`\href{${project.url}}{${project.title}}` : project.title}} $|$ \emph{${project.skills ? project.skills.filter(s => s && s.trim()).join(', ') : ''}}}}{${formatDateRange(project.from_date, project.to_date)}}
+                    {\makebox[0.78\textwidth][l]{\truncate{0.78\textwidth}{\textbf{${project.url ? String.raw`\href{${project.url}}{${project.title}}` : project.title}} $|$ \emph{${project.skills ? project.skills.filter(s => s && s.trim()).join(', ') : ''}}}}}{\hspace{4pt}${formatDateRange(project.from_date, project.to_date)}}
                 `;
 
                 if (project.highlights && project.highlights.length > 0) {

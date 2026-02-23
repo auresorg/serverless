@@ -157,14 +157,20 @@ const JAKES_RESUME = (data, safeGet, formatDate, formatDateRange) => {
         \resumeSubHeadingListStart
             \resumeSubheading
             {${safeGet(data, 'education.name')}}{${safeGet(data, 'education.location') || ''}}
-            {${safeGet(data, 'education.degree')} ${safeGet(data, 'education.course') || ''}}
+            {${safeGet(data, 'education.degree')} in ${safeGet(data, 'education.course') || ''}}
             {${safeGet(data, 'education.from') ? formatDate(safeGet(data, 'education.from')) + (safeGet(data, 'education.to') ? ' -- ' + formatDate(safeGet(data, 'education.to')) : ' -- Present') : ''}} 
         `;
 
-        if (safeGet(data, 'education.score') && safeGet(data, 'education.maxscore')) {
+        if (safeGet(data, 'education.description')) {
             TEMPLATE += String.raw`
             \resumeItemListStart
-                \resumeItem{Scored: ${safeGet(data, 'education.score')} of ${safeGet(data, 'education.maxscore')}}
+            \resumeItem{${safeGet(data, 'education.description')}}
+            \resumeItemListEnd
+            `;
+        } else if (safeGet(data, 'education.grade')) {
+            TEMPLATE += String.raw`
+            \resumeItemListStart
+            \resumeItem{CGPA: ${safeGet(data, 'education.grade')}}
             \resumeItemListEnd
             `;
         }

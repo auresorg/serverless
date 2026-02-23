@@ -411,7 +411,7 @@ app.http("custex", {
 
         try {
             const body = await req.json();
-            if (!body || !body.role) {
+            if (!body || !body.userId || !body.slug) {
                 return new Response("Missing role", { status: 400 });
             }
 
@@ -428,7 +428,7 @@ app.http("custex", {
                 status: 200,
                 headers: {
                     "Content-Type": "application/x-tex",
-                    "X-File-Name": `${body.role}.tex`,
+                    "X-File-Name": `${body.slug}.tex`,
                 },
             });
 

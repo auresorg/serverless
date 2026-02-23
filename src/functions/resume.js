@@ -386,26 +386,56 @@ app.http("custex", {
     methods: ["POST"],
     authLevel: "anonymous",
     handler: async (req) => {
+        const dbUrl = process.env.DATABASE_URL;
+        const match = dbUrl.match(
+            /postgres:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/([^?]+)/
+        );
+
+        if (!match) {
+            return new Response("Invalid DATABASE_URL", { status: 500 });
+        }
+
+        const [, dbUser, dbPassword, host, port, database] = match;
+
+        const client = new Client({
+            host,
+            port,
+            user: dbUser,
+            password: dbPassword,
+            database,
+            ssl: {
+                rejectUnauthorized: true,
+                ca: normalizeCa()
+            }
+        });
+
         try {
-            const reqBody = await req.json();
-            if (!reqBody || !reqBody.role) {
-                return new Response("Missing slug", { status: 400 });
+            const body = await req.json();
+            if (!body || !body.role) {
+                return new Response("Missing role", { status: 400 });
             }
 
-            // slug is canonical and unique
-            const slug = reqBody.role;
+            await client.connect();
 
-            const tex = renderResume(reqBody);
+            const payload = await fetchFreshData(client, body);
+            if (!payload) {
+                return new Response("Not found", { status: 404 });
+            }
+
+            const tex = renderResume(payload);
 
             return new Response(tex, {
                 status: 200,
                 headers: {
                     "Content-Type": "application/x-tex",
-                    "X-File-Name": `${slug}.tex`,
+                    "X-File-Name": `${body.role}.tex`,
                 },
             });
+
         } catch (error) {
             return new Response(`Error: ${error.message}`, { status: 500 });
+        } finally {
+            await client.end();
         }
     },
 });

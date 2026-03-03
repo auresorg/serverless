@@ -535,3 +535,50 @@ app.http('resume-direct', {
         }
     }
 });
+
+app.http('delete-resume', {
+    methods: ['POST'],
+    authLevel: 'anonymous',
+    handler: async (req) => {
+        log("Received resume deletion request");
+
+        try {
+            const body = await req.json();
+            const { type, role, slug, username } = body;
+
+            if (!type || !username) {
+                return new Response("Invalid payload", { status: 400 });
+            }
+
+            let fileName;
+
+            if (type === 'standard') {
+                if (!role) {
+                    return new Response("Role required for standard", { status: 400 });
+                }
+                fileName = `${username}-${role}.pdf`;
+            } else if (type === 'custom') {
+                if (!slug) {
+                    return new Response("Slug required for custom", { status: 400 });
+                }
+                fileName = `${slug}.pdf`;
+            } else {
+                return new Response("Invalid type", { status: 400 });
+            }
+
+            await axios.delete(
+                `${SUPABASE_URL}/${BUCKET}/${encodeURIComponent(fileName)}`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${SERVICE_ROLE_KEY}`
+                    }
+                }
+            );
+
+            return new Response(null, { status: 200 });
+        } catch (err) {
+            critical("Resume deletion error: " + err.message);
+            return new Response(`Error: ${err.message}`, { status: 500 });
+        }
+    }
+});

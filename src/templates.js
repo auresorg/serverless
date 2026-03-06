@@ -142,11 +142,11 @@ const JAKES_RESUME = (data, safeGet, formatDate, formatDateRange) => {
             // 5. Github
             if (safeGet(data, 'github')) {
                 items.push(
-                    String.raw`\href{https://github.com/${safeGet(data, 'github')}}{\underline{GitHub}}`
+                    String.raw`\href{https://github.com/${safeGet(data, 'github')}}{\underline{github.com/${safeGet(data, 'github').split('/').filter(Boolean).slice(-1)[0]}}}`
                 );
             }
 
-            return items.slice(0, 5).join(' $|$ ');
+            return items.slice(0, 3).join(' $|$ ');
         })()}
         \end{center}
     `;
@@ -156,9 +156,9 @@ const JAKES_RESUME = (data, safeGet, formatDate, formatDateRange) => {
         \section{Education}
         \resumeSubHeadingListStart
             \resumeSubheading
-            {${safeGet(data, 'education.name')}}{${safeGet(data, 'education.location') || ''}}
+            {${safeGet(data, 'education.name')}}{${safeGet(data, 'education.from') ? formatDate(safeGet(data, 'education.from')) + (safeGet(data, 'education.to') ? ' -- ' + formatDate(safeGet(data, 'education.to')) : ' -- Present') : ''}}
             {${safeGet(data, 'education.degree')} in ${safeGet(data, 'education.course') || ''}}
-            {${safeGet(data, 'education.from') ? formatDate(safeGet(data, 'education.from')) + (safeGet(data, 'education.to') ? ' -- ' + formatDate(safeGet(data, 'education.to')) : ' -- Present') : ''}} 
+            {${safeGet(data, 'education.location') || ''}}
         `;
 
         if (safeGet(data, 'education.description')) {
@@ -255,8 +255,8 @@ const JAKES_RESUME = (data, safeGet, formatDate, formatDateRange) => {
 
     if (safeGet(data, 'courses') && data.courses.length > 0) {
         const sortedCourses = [...data.courses].sort((a, b) => {
-            const dateA = a.completed_at ? new Date(a.completed_at) : new Date(0);
-            const dateB = b.completed_at ? new Date(b.completed_at) : new Date(0);
+            const dateA = a.completed_at ? new Date(a.completed_on) : new Date(0);
+            const dateB = b.completed_at ? new Date(b.completed_on) : new Date(0);
             return dateB - dateA;
         });
 
@@ -268,7 +268,7 @@ const JAKES_RESUME = (data, safeGet, formatDate, formatDateRange) => {
         for (const course of sortedCourses) {
             TEMPLATE += String.raw`
                 \resumeSubheading
-                    {${course.title || ''}}{${formatDateRange(course.started_at, course.completed_at)}}
+                    {${course.title || ''}}{${formatDate(course.completed_on)}}
                     {${course.provider || ''}}{}
                 `;
 

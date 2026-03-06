@@ -109,7 +109,7 @@ async function fetchFreshData(client, params) {
     const userRow = userRes.rows[0];
     if (!userRow) return null;
 
-    let data;
+    let data, template;
 
     if (type === 'standard') {
         const res = await client.query(
@@ -178,7 +178,7 @@ async function fetchFreshData(client, params) {
         const config = cRes.rows[0];
         if (!config) return null;
 
-        const template = config.template
+        template = config.template
 
         const res = await client.query(
             `
@@ -215,7 +215,7 @@ async function fetchFreshData(client, params) {
         portfolio: safe(userRow.portfolio),
         leetcode: safe(userRow.leetcode),
         phonenumber: safe(userRow.phonenumber),
-        template: data.template,
+        template: template,
 
         education: data.edu
             ? {

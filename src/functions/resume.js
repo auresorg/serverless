@@ -128,7 +128,7 @@ async function fetchFreshData(client, params) {
                        ORDER BY start_date DESC) p) AS projects,
 
                 (SELECT json_agg(c)
-                 FROM (SELECT title, platform, description, completed_on
+                 FROM (SELECT title, platform, description, completed_on, url
                        FROM certification
                        WHERE user_id = $1 AND role = $2
                        ORDER BY completed_on DESC) c) AS certs,
@@ -178,6 +178,8 @@ async function fetchFreshData(client, params) {
         const config = cRes.rows[0];
         if (!config) return null;
 
+        const template = config.template
+
         const res = await client.query(
             `
             SELECT
@@ -213,6 +215,7 @@ async function fetchFreshData(client, params) {
         portfolio: safe(userRow.portfolio),
         leetcode: safe(userRow.leetcode),
         phonenumber: safe(userRow.phonenumber),
+        template: data.template,
 
         education: data.edu
             ? {
@@ -238,8 +241,9 @@ async function fetchFreshData(client, params) {
         courses: (data.certs || []).map(c => ({
             title: safe(c.title),
             provider: safe(c.platform),
-            completed_at: safe(c.completed_on),
-            highlights: [safe(c.description)]
+            completed_on: safe(c.completed_on),
+            highlights: [safe(c.description)],
+            url: safe(c.url)
         })),
 
         experiences: (data.exps || []).map(e => ({

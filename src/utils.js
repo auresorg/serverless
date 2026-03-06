@@ -2,7 +2,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const axios = require('axios');
-const { JAKES_RESUME } = require('./templates');
+const { JAKES_COMPACT, JAKES_RESUME } = require('./templates');
 
 const TG_CHAT_ID = process.env.TG_CHAT_ID;
 
@@ -65,7 +65,21 @@ const renderResume = (data) => {
         return `${startFormatted} -- ${formatDate(end)}`;
     };
 
-    let TEMPLATE = JAKES_RESUME(data, safeGet, formatDate, formatDateRange);
+
+    let TEMPLATE;
+    
+    switch (data.template) {
+        case 'jakec':
+            TEMPLATE = JAKES_COMPACT(data, safeGet, formatDate, formatDateRange);
+            break;
+
+        case 'jakes':
+            TEMPLATE = JAKES_RESUME(data, safeGet, formatDate, formatDateRange);
+            break;
+
+        default:
+            TEMPLATE = JAKES_RESUME(data, safeGet, formatDate, formatDateRange);
+    }
 
     return TEMPLATE;
 };

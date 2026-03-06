@@ -111,38 +111,38 @@ const JAKES_RESUME = (data, safeGet, formatDate, formatDateRange) => {
             ${(() => {
             const items = [];
 
-            // 1. Portfolio
-            if (safeGet(data, 'portfolio')) {
-                items.push(
-                    String.raw`\href{${safeGet(data, 'portfolio')}}{\underline{Portfolio}}`
-                );
-            }
-
-            // 2. LinkedIn
+            // 1. LinkedIn
             if (safeGet(data, 'linkedin')) {
                 items.push(
-                    String.raw`\href{${safeGet(data, 'linkedin')}}{\underline{LinkedIn}}`
+                    String.raw`\href{${safeGet(data, 'linkedin')}}{\underline{linkedin.com/${safeGet(data, 'linkedin').split('/').filter(Boolean).slice(-1)[0]}}}`
                 );
             }
 
-            // 3. Github
-            if (safeGet(data, 'github')) {
-                items.push(
-                    String.raw`\href{https://github.com/${safeGet(data, 'github')}}{\underline{GitHub}}`
-                );
-            }
-
-            // 4. Phone (clickable tel link)
+            // 2. Phone (clickable tel link)
             if (safeGet(data, 'phonenumber')) {
                 items.push(
                     String.raw`\href{tel:${safeGet(data, 'phonenumber')}}{\underline{${safeGet(data, 'phonenumber')}}}`
                 );
             }
 
-            // 5. Email
+            // 3. Email
             if (safeGet(data, 'email')) {
                 items.push(
                     String.raw`\href{mailto:${safeGet(data, 'email')}}{\underline{${safeGet(data, 'email')}}}`
+                );
+            }
+
+            // 4. Portfolio
+            if (safeGet(data, 'portfolio')) {
+                items.push(
+                    String.raw`\href{${safeGet(data, 'portfolio')}}{\underline{Portfolio}}`
+                );
+            }
+
+            // 5. Github
+            if (safeGet(data, 'github')) {
+                items.push(
+                    String.raw`\href{https://github.com/${safeGet(data, 'github')}}{\underline{GitHub}}`
                 );
             }
 
@@ -412,6 +412,403 @@ const JAKES_RESUME = (data, safeGet, formatDate, formatDateRange) => {
     return TEMPLATE;
 };
 
+const JAKES_COMPACT = (data, safeGet, formatDate, formatDateRange) => {
+
+    const skillsData = require('./skills.json');
+
+    const allSkills = new Set();
+
+    if (safeGet(data, 'projects') && data.projects.length > 0) {
+        for (const project of data.projects) {
+            if (project.skills && Array.isArray(project.skills)) {
+                project.skills.forEach(skill => {
+                    if (skill && skill.trim()) {
+                        allSkills.add(skill.trim());
+                    }
+                });
+            }
+        }
+    }
+
+    // Define categories from skills.json
+    const skillCategories = {
+        "Languages": skillsData.Languages || [],
+        "Databases": skillsData.Databases || [],
+        "Platforms": skillsData.Platforms || [],
+        "Frameworks": skillsData.Frameworks || [],
+        "Tools": skillsData.Tools || [],
+        "Operating Systems": skillsData["Operating Systems"] || [],
+        "Others": []
+    };
+
+    let TEMPLATE = String.raw`
+        \documentclass[letterpaper,11pt]{article}
+
+        \usepackage{latexsym}
+        \usepackage[margin=1in]{geometry}
+        \usepackage{titlesec}
+        \usepackage{marvosym}
+        \usepackage[usenames,dvipsnames]{color}
+        \usepackage{verbatim}
+        \usepackage{enumitem}
+        \usepackage[hidelinks]{hyperref}
+        \usepackage{fancyhdr}
+        \usepackage[english]{babel}
+        \usepackage{tabularx}
+        \usepackage{truncate}
+
+        \pagestyle{fancy}
+        \fancyhf{} 
+        \fancyfoot{}
+        \renewcommand{\headrulewidth}{0pt}
+        \renewcommand{\footrulewidth}{0pt}
+
+        \addtolength{\oddsidemargin}{-0.5in}
+        \addtolength{\evensidemargin}{-0.5in}
+        \addtolength{\textwidth}{1in}
+        \addtolength{\topmargin}{-.5in}
+        \addtolength{\textheight}{1.0in}
+
+        \urlstyle{same}
+
+        \raggedbottom
+        \raggedright
+        \setlength{\tabcolsep}{0in}
+
+        \titleformat{\section}{
+        \vspace{-4pt}\scshape\raggedright\large
+        }{}{0em}{}[\color{black}\titlerule \vspace{-5pt}]
+
+        \newcommand{\resumeItem}[1]{
+        \item\small{
+            {#1 \vspace{-2pt}}
+        }
+        }
+
+        \newcommand{\resumeSubheading}[4]{
+        \vspace{-2pt}\item
+            \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
+            \textbf{#1} & #2 \\
+            \textit{\small#3} & \textit{\small #4} \\
+            \end{tabular*}\vspace{-7pt}
+        }
+
+        \newcommand{\resumeSubSubheading}[2]{
+            \item
+            \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
+            \textit{\small#1} & \textit{\small #2} \\
+            \end{tabular*}\vspace{-7pt}
+        }
+
+        \newcommand{\resumeProjectHeading}[2]{
+            \item
+            \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
+            \small#1 & #2 \\
+            \end{tabular*}\vspace{-7pt}
+        }
+
+        \newcommand{\resumeSubItem}[1]{\resumeItem{#1}\vspace{-4pt}}
+
+        \renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}
+
+        \newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0.15in, label={}]}
+        \newcommand{\resumeSubHeadingListEnd}{\end{itemize}}
+        \newcommand{\resumeItemListStart}{\begin{itemize}}
+        \newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-5pt}}
+
+        \begin{document}
+
+        %----------HEADING----------
+        \begin{center}
+            \textbf{\Huge \scshape ${safeGet(data, 'name')}} \\ \vspace{1pt}
+            \small
+            ${(() => {
+            const items = [];
+
+            // 1. LinkedIn
+            if (safeGet(data, 'linkedin')) {
+                items.push(
+                    String.raw`\href{${safeGet(data, 'linkedin')}}{\underline{linkedin.com/${safeGet(data, 'linkedin').split('/').filter(Boolean).slice(-1)[0]}}}`
+                );
+            }
+
+            // 2. Phone (clickable tel link)
+            if (safeGet(data, 'phonenumber')) {
+                items.push(
+                    String.raw`\href{tel:${safeGet(data, 'phonenumber')}}{\underline{${safeGet(data, 'phonenumber')}}}`
+                );
+            }
+
+            // 3. Email
+            if (safeGet(data, 'email')) {
+                items.push(
+                    String.raw`\href{mailto:${safeGet(data, 'email')}}{\underline{${safeGet(data, 'email')}}}`
+                );
+            }
+
+            // 4. Portfolio
+            if (safeGet(data, 'portfolio')) {
+                items.push(
+                    String.raw`\href{${safeGet(data, 'portfolio')}}{\underline{Portfolio}}`
+                );
+            }
+
+            // 5. Github
+            if (safeGet(data, 'github')) {
+                items.push(
+                    String.raw`\href{https://github.com/${safeGet(data, 'github')}}{\underline{github.com/${safeGet(data, 'github').split('/').filter(Boolean).slice(-1)[0]}}}`
+                );
+            }
+
+            return items.slice(0, 3).join(' $|$ ');
+        })()}
+        \end{center}
+    `;
+
+    if (safeGet(data, 'education') && safeGet(data, 'education.name')) {
+        TEMPLATE += String.raw`
+        \section{Education}
+        \resumeSubHeadingListStart
+            \resumeSubheading
+            {${safeGet(data, 'education.name')}}{${safeGet(data, 'education.from') ? formatDate(safeGet(data, 'education.from')) + (safeGet(data, 'education.to') ? ' -- ' + formatDate(safeGet(data, 'education.to')) : ' -- Present') : ''}}
+            {${safeGet(data, 'education.degree')} in ${safeGet(data, 'education.course') || ''}}
+            {${safeGet(data, 'education.location') || ''}}
+        `;
+
+        if (safeGet(data, 'education.description')) {
+            TEMPLATE += String.raw`
+            \resumeItemListStart
+            \resumeItem{${safeGet(data, 'education.description')}}
+            \resumeItemListEnd
+            `;
+        } else if (safeGet(data, 'education.grade')) {
+            TEMPLATE += String.raw`
+            \resumeItemListStart
+            \resumeItem{CGPA: ${safeGet(data, 'education.grade')}}
+            \resumeItemListEnd
+            `;
+        }
+
+        TEMPLATE += String.raw`
+        \resumeSubHeadingListEnd
+        `;
+    }
+
+    if (safeGet(data, 'experiences') && data.experiences.length > 0) {
+        const sortedExperiences = [...data.experiences].sort((a, b) => {
+            const dateA = a.to_date ? new Date(a.to_date) : (a.from_date ? new Date(a.from_date) : new Date(0));
+            const dateB = b.to_date ? new Date(b.to_date) : (b.from_date ? new Date(b.from_date) : new Date(0));
+            return dateB - dateA;
+        });
+
+        TEMPLATE += String.raw`
+        \section{Experience}
+        \resumeSubHeadingListStart
+        `;
+
+        for (const exp of sortedExperiences) {
+            TEMPLATE += String.raw`
+            \resumeSubheading
+                {${exp.title || ''}}{${formatDateRange(exp.from_date, exp.to_date)}}
+                {${exp.company || ''}}{${exp.location || ''}}
+            `;
+
+            if (exp.highlights && exp.highlights.length > 0) {
+                TEMPLATE += String.raw`
+                \resumeItemListStart
+                    ${exp.highlights
+                        .filter(h => h && h.trim())
+                        .map((highlight) => String.raw`\resumeItem{${highlight}}`)
+                        .join("")}
+                \resumeItemListEnd
+                `;
+            }
+        }
+
+        TEMPLATE += String.raw`
+        \resumeSubHeadingListEnd
+        `;
+    }
+
+    if (safeGet(data, 'projects') && data.projects.length > 0) {
+        const sortedProjects = [...data.projects].sort((a, b) => {
+            const dateA = a.to_date ? new Date(a.to_date) : (a.from_date ? new Date(a.from_date) : new Date(0));
+            const dateB = b.to_date ? new Date(b.to_date) : (b.from_date ? new Date(b.from_date) : new Date(0));
+            return dateB - dateA;
+        });
+
+        TEMPLATE += String.raw`
+        \section{Projects}
+            \resumeSubHeadingListStart
+        `;
+
+        for (const project of sortedProjects) {
+            if (project.title) {
+                TEMPLATE += String.raw`
+                \resumeProjectHeading
+                    {\makebox[0.78\textwidth][l]{\truncate{0.78\textwidth}{\textbf{${project.url ? String.raw`\href{${project.url}}{${project.title}}` : project.title}} $|$ \emph{${project.skills ? project.skills.filter(s => s && s.trim()).join(', ') : ''}}}}}{\hspace{4pt}${formatDateRange(project.from_date, project.to_date)}}
+                `;
+
+                if (project.highlights && project.highlights.length > 0) {
+                    TEMPLATE += String.raw`
+                    \resumeItemListStart
+                        ${project.highlights
+                            .filter(highlight => highlight && highlight.trim())
+                            .map((highlight) => String.raw`\resumeItem{${highlight}}`)
+                            .join("")}
+                    \resumeItemListEnd
+                `;
+                }
+            }
+        }
+
+        TEMPLATE += String.raw` 
+            \resumeSubHeadingListEnd
+        `;
+    }
+
+    if (safeGet(data, 'courses') && data.courses.length > 0) {
+        const sortedCourses = [...data.courses].sort((a, b) => {
+            const dateA = a.completed_on ? new Date(a.completed_on) : new Date(0);
+            const dateB = b.completed_on ? new Date(b.completed_on) : new Date(0);
+            return dateB - dateA;
+        });
+
+        TEMPLATE += String.raw`
+        \section{Certifications}
+        \resumeSubHeadingListStart
+        `;
+
+        for (const course of sortedCourses) {
+            TEMPLATE += String.raw`
+            \item
+            \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
+            \truncate{0.75\textwidth}{\textbf{${course.title || ''}} $|$ \emph{${course.provider || ''}}} & ${formatDate(course.completed_on)}\\
+            \end{tabular*}
+            {\small \href{${course.url || ''}}{\truncate{0.83\textwidth}{${course.url || ''}}}}
+            \vspace{-3pt}
+            `;
+        }
+
+        TEMPLATE += String.raw`
+        \resumeSubHeadingListEnd
+        `;
+    }
+
+    if (safeGet(data, 'awards') && data.awards.length > 0) {
+        const sortedAwards = [...data.awards].sort((a, b) => {
+            const dateA = a.date ? new Date(a.date) : new Date(0);
+            const dateB = b.date ? new Date(b.date) : new Date(0);
+            return dateB - dateA;
+        });
+
+        TEMPLATE += String.raw`
+        \section{Awards}
+        \resumeSubHeadingListStart
+        `;
+
+        for (const award of sortedAwards) {
+            if (!award.title) continue;
+
+            TEMPLATE += String.raw`
+            \resumeSubheading
+                {${award.title}}{${award.date ? formatDate(award.date) : ''}}
+                {${award.issuer || ''} ${award.type ? String.raw`\textnormal{\textit{-- ${award.type}}}` : ''}}{}
+            `;
+        }
+
+        TEMPLATE += String.raw`
+        \resumeSubHeadingListEnd
+        `;
+    }
+
+    // ============ SKILLS SECTION ============
+    if (allSkills.size > 0) {
+        // Object to store categorized skills
+        const categorized = {
+            "Languages": [],
+            "Databases": [],
+            "Platforms": [],
+            "Frameworks": [],
+            "Tools": [],
+            "Operating Systems": [],
+            "Others": []
+        };
+
+        // Categorize each skill
+        allSkills.forEach(skill => {
+            const skillLower = skill.toLowerCase();
+            let matched = false;
+
+            // Check each category
+            for (const category of ["Languages", "Databases", "Platforms", "Frameworks", "Tools", "Operating Systems"]) {
+                if (skillCategories[category].some(item => item.toLowerCase() === skillLower)) {
+                    categorized[category].push(skill);
+                    matched = true;
+                    break;
+                }
+            }
+
+            if (!matched) {
+                categorized.Others.push(skill);
+            }
+        });
+
+        // Sort skills alphabetically
+        for (const category in categorized) {
+            categorized[category].sort();
+        }
+
+        // Build the LaTeX section
+        TEMPLATE += String.raw`
+        
+        \section{Technical Skills}
+            \begin{itemize}[leftmargin=0.15in, label={}]
+                \small{\item{
+        `;
+
+        // Add categories that have skills
+        const categoryEntries = [];
+
+        if (categorized.Languages.length > 0) {
+            categoryEntries.push(`\\textbf{Languages}{: ${categorized.Languages.join(', ')}}`);
+        }
+        if (categorized.Databases.length > 0) {
+            categoryEntries.push(`\\textbf{Databases}{: ${categorized.Databases.join(', ')}}`);
+        }
+        if (categorized.Platforms.length > 0) {
+            categoryEntries.push(`\\textbf{Platforms}{: ${categorized.Platforms.join(', ')}}`);
+        }
+        if (categorized.Frameworks.length > 0) {
+            categoryEntries.push(`\\textbf{Frameworks}{: ${categorized.Frameworks.join(', ')}}`);
+        }
+        if (categorized.Tools.length > 0) {
+            categoryEntries.push(`\\textbf{Tools}{: ${categorized.Tools.join(', ')}}`);
+        }
+        if (categorized["Operating Systems"].length > 0) {
+            categoryEntries.push(`\\textbf{Operating Systems}{: ${categorized["Operating Systems"].join(', ')}}`);
+        }
+        if (categorized.Others.length > 0) {
+            categoryEntries.push(`\\textbf{Others}{: ${categorized.Others.join(', ')}}`);
+        }
+
+        TEMPLATE += categoryEntries.join(` \\\\\n`);
+
+        TEMPLATE += String.raw`
+                }}
+            \end{itemize}
+        `;
+    }
+    // ============ END SKILLS SECTION ============
+
+    TEMPLATE += String.raw`
+    \end{document}
+    `;
+
+    return TEMPLATE;
+};
+
 module.exports = {
-    JAKES_RESUME
+    JAKES_RESUME,
+    JAKES_COMPACT
 };

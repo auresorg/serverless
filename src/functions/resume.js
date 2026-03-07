@@ -124,25 +124,25 @@ async function fetchFreshData(client, params) {
                 (SELECT json_agg(p)
                  FROM (SELECT name, url, repo, tech, description, start_date, end_date
                        FROM project
-                       WHERE user_id = $1 AND role = $2
+                       WHERE user_id = $1 AND role::jsonb ? $2
                        ORDER BY start_date DESC) p) AS projects,
 
                 (SELECT json_agg(c)
                  FROM (SELECT title, platform, description, completed_on, url
                        FROM certification
-                       WHERE user_id = $1 AND role = $2
+                       WHERE user_id = $1 AND role::jsonb ? $2
                        ORDER BY completed_on DESC) c) AS certs,
 
                 (SELECT json_agg(ex)
                  FROM (SELECT title, company, start_date, end_date, description
                        FROM experience
-                       WHERE user_id = $1 AND role = $2
+                       WHERE user_id = $1 AND role::jsonb ? $2
                        ORDER BY start_date DESC) ex) AS exps,
 
                 (SELECT json_agg(a)
                  FROM (SELECT title, issuer, type, description, date
                        FROM award
-                       WHERE user_id = $1 AND (role = $2 OR role IS NULL)
+                       WHERE user_id = $1 AND (role IS NULL OR role::text = '[]' OR role::text = 'null' OR role::jsonb ? $2)
                        ORDER BY date DESC) a) AS awards
             `,
             [userId, role]

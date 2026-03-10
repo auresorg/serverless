@@ -143,12 +143,15 @@ async function fetchFreshData(client, params) {
                  FROM (SELECT title, issuer, type, description, date
                        FROM award
                        WHERE user_id = $1 AND (role IS NULL OR role::text = '[]' OR role::text = 'null' OR role::jsonb ? $2)
-                       ORDER BY date DESC) a) AS awards
+                       ORDER BY date DESC) a) AS awards,
+                
+                (SELECT template FROM resumes WHERE username = (SELECT username FROM users WHERE id = $1) AND role = $2 LIMIT 1) AS template
             `,
             [userId, role]
         );
 
         data = res.rows[0];
+        template = data.template;
     } else if (type === 'custom-direct') {
         const res = await client.query(
             `

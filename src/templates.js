@@ -549,7 +549,7 @@ const JAKES_COMPACT = (data, safeGet, formatDate, formatDateRange) => {
             // 4. Portfolio
             if (safeGet(data, 'portfolio')) {
                 items.push(
-                    String.raw`\href{${safeGet(data, 'portfolio')}}{\underline{Portfolio}}`
+                    String.raw`\href{${safeGet(data, 'portfolio')}}{\underline{${safeGet(data, 'portfolio').replace(/https?:\/\//, '').replace(/\/$/, '')}}}`
                 );
             }
 

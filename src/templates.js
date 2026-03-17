@@ -655,7 +655,7 @@ const JAKES_COMPACT = (data, safeGet, formatDate, formatDateRange) => {
                         : `https://github.com/${project.github}`;
 
                     TEMPLATE += String.raw`
-                        {\small \textbf{Link:} \href{${link}}{\truncate{0.83\textwidth}{${link.replace('https://', '').replace(/\/$/, '')}}}}
+                        {\small \textbf{Link:} \href{${link}}{\truncate{0.83\textwidth}{${link.replace(/\/$/, '')}}}}
                         \vspace{-3pt}
                     `;
                 }

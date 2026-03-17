@@ -646,8 +646,19 @@ const JAKES_COMPACT = (data, safeGet, formatDate, formatDateRange) => {
             if (project.title) {
                 TEMPLATE += String.raw`
                 \resumeProjectHeading
-                    {\makebox[0.78\textwidth][l]{\truncate{0.78\textwidth}{\textbf{${project.url ? String.raw`\href{${project.url}}{${project.title}}` : project.title}} $|$ \emph{${project.skills ? project.skills.filter(s => s && s.trim()).join(', ') : ''}}}}}{\hspace{4pt}${formatDateRange(project.from_date, project.to_date)}}
+                    {\makebox[0.78\textwidth][l]{\truncate{0.78\textwidth}{\textbf{${project.title}} $|$ \emph{${project.skills ? project.skills.filter(s => s && s.trim()).join(', ') : ''}}}}}{\hspace{4pt}${formatDateRange(project.from_date, project.to_date)}}
                 `;
+
+                if (project.url || project.github) {
+                    const link = project.url
+                        ? project.url
+                        : `https://github.com/${project.github}`;
+
+                    TEMPLATE += String.raw`
+                        {\small \textbf{Link:} \href{${link}}{\truncate{0.83\textwidth}{${link.replace('https://', '').replace(/\/$/, '')}}}}
+                        \vspace{-3pt}
+                    `;
+                }
 
                 if (project.highlights && project.highlights.length > 0) {
                     TEMPLATE += String.raw`
